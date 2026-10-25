@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Demo phone (SMS inbox)</title>
+<style>body{font:16px system-ui;max-width:420px;margin:0 auto;padding:16px;background:#111;color:#eee}input,button{font:inherit;padding:10px;border-radius:8px;border:0;width:100%;box-sizing:border-box;margin:6px 0}.m{background:#243b2a;border-radius:12px;padding:10px;margin:8px 0}small{color:#9a9}</style>
+<h2>📱 Demo phone</h2><p><small>Stand-in for the reporter's phone. Enter the number used in the report to see police texts.</small></p>
+<input id=p inputmode=tel placeholder="+2567…"><button id=b>Show messages</button><div id=o></div>
+<script>
+if (!/^https?:$/.test(location.protocol)) { document.body.innerHTML = '<div style="font:16px system-ui;padding:24px;max-width:480px;margin:auto;color:#e8f2ef;background:#0b1412;min-height:100vh"><h2>Server not running</h2><p>This page was opened as a file, so it cannot reach the database. Start the server first, then open <b>http://localhost:3000</b> in the browser.</p><p style="color:#8fa8a2">Steps: <code>npm install</code>, then <code>node server.js</code>. See README.</p></div>'; throw new Error('Open through the server (http://localhost:3000), not as a file.'); }
+let t;const o=document.getElementById('o');async function load(){try{const r=await fetch('/api/inbox?phone='+encodeURIComponent(p.value));const j=await r.json();o.innerHTML=j.error?'<p>'+j.error+'</p>':(j.messages.map(m=>'<div class=m>'+m.body.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))+'<br><small>'+m.created_at+' UTC</small></div>').join('')||'<p>No messages yet.</p>')}catch{o.textContent='Server not reachable.'}}
+b.onclick=()=>{clearInterval(t);load();t=setInterval(load,4000)}</script>

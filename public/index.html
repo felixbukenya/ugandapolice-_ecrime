@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1412">
+<title>SafeReport UG</title>
+<link rel="icon" href="/logo.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233ecf9f'/%3E%3Cpath d='M16 6l8 3v6c0 5-3.5 8.5-8 11-4.5-2.500-8-6-8-11V9z' fill='%2304231a'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#0b1412;--panel:#121f1c;--panel2:#182927;--line:#243936;--text:#e8f2ef;--mute:#8fa8a2;--accent:#3ecf9f;--accent-ink:#04231a;--red:#ff6b6b;--amber:#f5b545;--blue:#6aa7ff;--radius:14px}
+*{box-sizing:border-box;margin:0}
+html{color-scheme:dark}
+body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh;padding-bottom:80px}
+.wrap{max-width:560px;margin:0 auto;padding:16px}
+.wrap.wide{max-width:1100px}
+header.top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;max-width:1100px;margin:0 auto}
+.brand{font-weight:700;font-size:18px}.brand b{color:var(--accent)}
+.tag{font-size:12px;color:var(--mute);border:1px solid var(--line);padding:2px 8px;border-radius:99px}
+h1{font-size:30px;line-height:1.15;margin:18px 0 10px}h2{font-size:22px;margin:6px 0 12px}h3{font-size:15px;color:var(--mute);font-weight:600;margin:16px 0 8px;text-transform:uppercase;letter-spacing:.04em}
+p.lead{color:var(--mute);margin-bottom:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.btn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:14px 16px;border-radius:var(--radius);border:1px solid var(--line);background:var(--panel2);color:var(--text);font:inherit;cursor:pointer;text-align:left;text-decoration:none}
+.btn small{display:block;color:var(--mute);font-size:13px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}.btn.primary small{color:#0a4a37}
+.btn.sm{width:auto;display:inline-flex;padding:8px 12px;font-size:14px;white-space:nowrap}
+.btn.danger{border-color:#5a2a2a;color:var(--red)}
+.btn:disabled{opacity:.5;cursor:wait}
+.sos{border:1px solid #6b2b2b;background:#2a1517;color:#ffb3b3;border-radius:var(--radius);padding:14px;font-size:14px;margin-top:16px}.sos b{color:#ff8a8a;font-size:16px}
+label{display:block;font-size:14px;margin:14px 0 6px;font-weight:600}
+input,select,textarea{width:100%;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:12px;font:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:0}
+textarea{min-height:110px;resize:vertical}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:8px 14px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;font-size:14px;cursor:pointer}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
+.hint{font-size:13px;color:var(--mute);margin-top:6px}
+.err{background:#2a1517;border:1px solid #6b2b2b;color:#ffb3b3;border-radius:12px;padding:10px 12px;margin:12px 0;font-size:14px}
+.ok{background:#102a22;border:1px solid #1f5a44;color:#9ff0cf;border-radius:12px;padding:10px 12px;margin:12px 0;font-size:14px}
+.check{display:flex;gap:10px;align-items:flex-start;margin:16px 0;font-weight:400}.check input{width:auto;margin-top:4px}
+.refbox{text-align:center;font-size:36px;font-weight:800;letter-spacing:.06em;padding:18px;margin:12px 0}
+.pinbox{text-align:center;font-size:26px;letter-spacing:.25em;color:var(--amber);padding:10px}
+nav.tabs{position:fixed;bottom:0;left:0;right:0;background:#0d1917ee;backdrop-filter:blur(8px);border-top:1px solid var(--line);display:flex;justify-content:center;padding:6px 8px calc(6px + env(safe-area-inset-bottom));z-index:10}
+nav.tabs a{flex:1;max-width:140px;text-align:center;color:var(--mute);text-decoration:none;font-size:12px;padding:6px 0;border-radius:10px}
+nav.tabs a .i{display:block;font-size:20px;line-height:1.2}
+nav.tabs a.on{color:var(--accent)}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.b-urgent{background:#3a1519;color:#ff8f8f;border-color:#6b2b2b}.b-high{background:#33260f;color:var(--amber);border-color:#6b4f1b}.b-normal{}
+.s-Received{color:var(--blue)}.s-Resolved{color:var(--accent)}.s-Rejected{color:var(--red)}
+.timeline{margin:10px 0 4px}.step{display:flex;gap:12px;padding:8px 0;position:relative;color:var(--mute)}
+.step .dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);margin-top:4px;flex:none;background:var(--bg)}
+.step.done{color:var(--text)}.step.done .dot{background:var(--accent);border-color:var(--accent)}
+.step small{display:block;color:var(--mute);font-size:12px}
+.step:not(:last-child):before{content:"";position:absolute;left:6px;top:24px;bottom:-8px;width:2px;background:var(--line)}
+.msgs{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.msg{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;background:var(--panel2);align-self:flex-start}
+.msg.me{background:#14463a;align-self:flex-end}.msg small{display:block;color:var(--mute);font-size:11px;margin-top:3px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px}.tile b{font-size:26px;display:block}.tile span{font-size:12px;color:var(--mute)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.bar{display:flex;align-items:center;gap:8px;font-size:13px;margin:5px 0}.bar span.k{width:120px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar i{display:block;height:10px;background:var(--accent);border-radius:5px;min-width:3px}.bar em{font-style:normal;color:var(--mute)}
+.case{cursor:pointer}.case:hover{border-color:var(--accent)}
+.case .meta{font-size:13px;color:var(--mute);margin:4px 0}
+.case-head{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.sub{display:flex;gap:8px;margin:8px 0 14px;overflow:auto}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+.modal{position:fixed;inset:0;background:#000a;z-index:20;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:16px}
+.modal>.sheet{background:var(--bg);border:1px solid var(--line);border-radius:18px;width:100%;max-width:720px;padding:16px;margin:auto 0}
+.evi{display:flex;gap:8px;flex-wrap:wrap}.evi img,.evi video{width:120px;height:120px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line)}th{color:var(--mute);font-weight:600}
+.warn{background:#33260f;border:1px solid #6b4f1b;color:var(--amber);border-radius:12px;padding:8px 12px;font-size:13px;margin:8px 0}
+footer.note{text-align:center;color:var(--mute);font-size:12px;margin:24px 0}
+@media(max-width:700px){.tiles{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+
+.cambox{position:relative;background:#000;border-radius:var(--radius);overflow:hidden;aspect-ratio:4/3;margin:8px 0 12px;border:1px solid var(--line)}
+.cambox video{width:100%;height:100%;object-fit:cover;display:block}.cambox video.mirror{transform:scaleX(-1)}
+.camshade{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;background:linear-gradient(transparent,#000c);font-size:14px;text-align:center}
+.pill{display:inline-block;background:#33385a;border:1px solid #5a5f8a;color:#e6e8ff;padding:6px 14px;border-radius:99px;font-weight:600;font-size:14px;margin:4px 0}
+.info{background:#12303f;border:1px solid #1f5a74;color:#9fdcf5;border-radius:12px;padding:10px 12px;margin:12px 0;font-size:14px}
+.stp{padding:4px 0;color:var(--mute)}.stp.done{color:var(--accent)}.stp.done:after{content:" ✓"}
+td .th{width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+.ok-t{color:var(--accent)}.bad-t{color:var(--red)}
+
+.gov{background:#0a0f0e;border-bottom:1px solid var(--line);color:var(--mute);font-size:12px;padding:6px 14px;text-align:center}
+.svc{display:block;text-decoration:none;color:var(--text);margin:0}.svc b{display:block;margin-bottom:4px}.svc small{color:var(--mute)}
+.svcs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.wlist a{display:block;padding:10px 0;border-bottom:1px solid var(--line);color:var(--blue);text-decoration:none}
+.bar{height:10px;border-radius:6px;background:var(--accent);margin:4px 0 10px}
+.catcard{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:14px;margin-bottom:10px;color:var(--text);font:inherit;cursor:pointer}.catcard b{display:block;margin-bottom:4px}.catcard small{color:var(--mute)}
+.caution{background:#33260f;border:1px solid #6b4f1b;color:var(--amber);border-radius:12px;padding:14px;font-size:14px;margin:12px 0}
+
+.adv h3{margin:0 0 6px;font-size:16px;text-transform:none;letter-spacing:0;color:var(--text)}.adv ul,.adv ol{padding-left:20px;margin:6px 0;line-height:1.6}
+.offbar{display:flex;gap:12px;align-items:center;background:linear-gradient(90deg,#0a2a22,#14463c);padding:14px 16px;border-bottom:2px solid var(--accent)}.offbar b{display:block;font-size:17px;letter-spacing:.5px}.offbar small{color:#b9d6cd}
+.stmt{font-size:16px;line-height:1.65;color:var(--text)}.bigwarn{text-align:center;font-size:30px;font-weight:700;margin:14px 0}
+.grp{margin:22px 0 8px;font-size:15px;letter-spacing:.8px;text-transform:uppercase;color:var(--accent)}
+.catcard{padding:18px!important}.catcard b{font-size:18px!important}.catcard small{font-size:15px;line-height:1.45}
+
+.logo{height:36px;width:36px;background:#fff;border-radius:50%;padding:2px;vertical-align:middle;margin-right:8px}.biglogo{display:block;margin:6px auto 4px;height:104px;width:104px;background:#fff;border-radius:50%;padding:5px}
+.slip{background:#fff;color:#111;border-radius:12px;padding:18px;max-width:520px;margin:0 auto 14px}.slip-h{display:flex;gap:12px;align-items:center;border-bottom:2px solid #1f2a8a;padding-bottom:10px;margin-bottom:8px;color:#1f2a8a}
+.slip table{width:100%;border-collapse:collapse}.slip td{padding:5px 0;border-bottom:1px solid #ddd;font-size:14px;vertical-align:top}.slip td:first-child{color:#555;width:36%}
+.slip .sigimg{max-width:240px;border:1px solid #ccc;border-radius:6px}.slip .qr{text-align:center;margin:10px 0}.slip .qr svg{width:150px;height:150px}.slip small{display:block;color:#555;word-break:break-all}.slip ul{margin:4px 0;padding-left:18px;font-size:13px}.slip-note{font-size:12px;color:#444}
+@media print{body{background:#fff!important}body *{visibility:hidden}#slip,#slip *{visibility:visible}#slip{position:absolute;left:0;top:0;width:100%;max-width:none}}
+</style>
+</head>
+<body>
+<header class="top"><div class="brand"><img class="logo" src="/logo.png" alt="Uganda Police crest">SafeReport <b>UG</b></div><span class="tag">Uganda Police e-Crime Reporting</span></header>
+<main id="app"></main>
+<nav class="tabs" id="tabs">
+  <a href="#home" data-t="home"><span class="i">⌂</span>Home</a>
+  <a href="#report" data-t="report"><span class="i">＋</span>Report</a>
+  <a href="#track" data-t="track"><span class="i">⌕</span>Track</a>
+  <a href="#police" data-t="police"><span class="i">⛨</span>Police</a>
+</nav>
+
+<script src="/vendor/qrcode.js"></script>
+<script>
+if (!/^https?:$/.test(location.protocol)) { document.body.innerHTML = '<div style="font:16px system-ui;padding:24px;max-width:480px;margin:auto;color:#e8f2ef;background:#0b1412;min-height:100vh"><h2>Server not running</h2><p>This page was opened as a file, so it cannot reach the database. Start the server first, then open <b>http://localhost:3000</b> in the browser.</p><p style="color:#8fa8a2">Steps: <code>npm install</code>, then <code>node server.js</code>. See README.</p></div>'; throw new Error('Open through the server (http://localhost:3000), not as a file.'); }
+
+'use strict';
+const $app = document.getElementById('app');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let META = { districts: [], categories: [], statuses: [] };
+let ME = null;                 // logged-in police user
+let draftFiles = [];           // evidence files for the report form
+let policeTab = 'dashboard';
+let modalRef = null;
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+async function api(path, method = 'GET', body) {
+  const r = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  const ct = r.headers.get('content-type') || '';
+  const data = ct.includes('json') ? await r.json() : await r.text();
+  if (!r.ok) throw new Error((data && data.error) || 'Request failed');
+  return data;
+}
+// server timestamps (with seconds) are UTC -> show in the viewer's local time; occurred_at (16 chars) is already local
+const fmt = d => { if (!d) return ''; d = String(d).replace('T', ' ');
+  if (d.length > 16) { const t = new Date(d.slice(0, 19).replace(' ', 'T') + 'Z'); if (!isNaN(t)) { const p = n => String(n).padStart(2, '0'); return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`; } }
+  return esc(d.slice(0, 16)); };
+const badge = p => `<span class="badge b-${esc(p)}">${esc(p)}</span>`;
+const err = m => `<div class="err" role="alert">${esc(m)}</div>`;
+
+/* ---------------- router ---------------- */
+async function route() {
+  let h = (location.hash || '#home').slice(1).split('?')[0];
+  if (h.startsWith('track/')) { sessionStorage.setItem('fillref', decodeURIComponent(h.slice(6))); h = 'track'; }
+  document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.t === h));
+  window.scrollTo(0, 0);
+  ({ home: vHome, report: vReport, track: vTrack, police: vPolice, kiosk: vKiosk, stats: vStats, safety: vSafety, victims: vVictims }[h] || vHome)();
+}
+window.addEventListener('hashchange', route);
+
+/* ---------------- HOME ---------------- */
+function vHome() {
+  const mine = (lsGet('myrefs') || '').split(',').filter(Boolean);
+  $app.innerHTML = `<div class="gov">🇺🇬 Uganda Police e-Crime portal · prototype</div><div class="wrap">
+    <img class="biglogo" src="/logo.png" alt="Uganda Police crest">
+    <div class="sos" style="margin-top:0"><b>If this is an emergency, call 999 or 112.</b> Do not submit a tip for danger happening right now.</div>
+    <h1>Submit a tip.<br>Protect your community.</h1>
+    <p class="lead">Report a crime to Uganda Police, anonymously if you wish. Add a voice message or your live location, and follow your case with a reference number.</p>
+    <a class="btn primary" href="#report" data-precat=""><span>Submit a Tip<small>Anonymous option · voice and location supported</small></span><span>→</span></a>
+    <div style="height:10px"></div>
+    <a class="btn" href="#track"><span>Track a report<small>Use your reference number and PIN</small></span><span>→</span></a>
+    ${mine.length ? `<h3>Reports on this device</h3>${mine.slice(-3).reverse().map(r => `<a class="btn" style="margin-bottom:8px" href="#track" data-fill="${esc(r)}"><span>${esc(r)}<small>Tap to track (you will need your PIN)</small></span><span>→</span></a>`).join('')}` : ''}
+    <h3>Report crime and fraud</h3>
+    <div class="card wlist" style="padding:4px 14px">
+      <a href="#report" data-precat="">Submit an anonymous tip online</a>
+      <a href="#report" data-precat="Mobile money fraud">Report mobile money fraud</a>
+      <a href="#report" data-precat="Cybercrime">Report cyber scams and incidents</a>
+      <a href="#report" data-precat="Corruption">Report corruption, including by an officer</a>
+      <a href="#report" data-precat="Defilement or child abuse">Report a crime against a child</a>
+    </div>
+    <h3>Services</h3>
+    <div class="svcs">
+      <a class="card svc" href="#stats"><b>📊 Crime statistics</b><small>What is being reported</small></a>
+      <a class="card svc" href="#safety"><b>🛡 Scams & safety</b><small>Stay safe, spot fraud</small></a>
+      <a class="card svc" href="#victims"><b>🤝 Victim support</b><small>What to do after a crime</small></a>
+      <a class="card svc" href="#track"><b>🔎 Case status</b><small>Check progress, reply to police</small></a>
+    </div>
+    <h3>Police sign-in</h3>
+    <a class="btn" href="#police"><span>Officers<small>National ID number and password</small></span><span>→</span></a>
+    <footer class="note">Reports are reviewed by Uganda Police officers. Knowingly giving false information to the police is an offence.</footer>
+  </div>`;
+}
+const CATDESC = {"Theft": "Stolen phone, bag, money or other property.", "Motorcycle (boda) or vehicle theft": "A stolen motorcycle, car or other vehicle.", "Cattle theft": "Stolen cattle, goats or other livestock.", "Burglary or break-in": "Someone broke into a home, shop or office.", "Robbery": "Theft using force or threats against a person.", "Armed robbery (gun or panga)": "Robbery by attackers with a gun, panga, knife or other weapon.", "Assault": "Beating, stabbing or wounding someone.", "Murder or killing": "A person has been killed or a body found.", "Mob justice": "A crowd attacking or killing a suspect.", "Kidnapping or abduction": "A person taken or held against their will, including for ransom.", "Threats or harassment": "Threats, stalking or repeated harassment.", "Extortion or blackmail": "Demanding money or favours with threats.", "Arson or fire outbreak": "A fire started on purpose or a fire outbreak at a home, market or vehicle.", "Vandalism": "Deliberate damage to property.", "Domestic violence": "Abuse or violence by a partner or family member.", "Sexual violence": "Rape or sexual assault.", "Defilement or child abuse": "Sexual abuse, violence or neglect of a child under 18.", "Human trafficking": "Moving or holding people for forced work or exploitation.", "Missing person": "Someone who is missing.", "Fraud or scam": "Being cheated out of money or property.", "Mobile money fraud": "Fake MoMo or Airtel Money messages, SIM swap, wrong-number tricks.", "Cybercrime": "Hacking, online scams, harassment or threats online.", "Forgery or counterfeit": "Fake documents, fake money or counterfeit goods.", "Drug-related": "Selling, making or using illegal drugs.", "Illegal firearms": "Someone holding or selling a gun without a licence.", "Corruption": "Bribery or abuse of office, including by a police officer.", "Land dispute": "Land grabbing, illegal eviction or forged titles.", "Public disorder or riot": "Riots, unlawful gatherings or serious disturbance.", "Traffic or road crime": "Hit-and-run, reckless driving or road offences.", "Other": "A crime not listed above."};
+const CATGROUPS = {'Violent crime':['Assault','Armed robbery (gun or panga)','Robbery','Murder or killing','Mob justice','Kidnapping or abduction','Threats or harassment','Extortion or blackmail','Arson or fire outbreak'],'Property crime':['Theft','Motorcycle (boda) or vehicle theft','Cattle theft','Burglary or break-in','Vandalism','Land dispute'],'Crimes against women and children':['Domestic violence','Sexual violence','Defilement or child abuse','Human trafficking','Missing person'],'Fraud and cyber crime':['Fraud or scam','Mobile money fraud','Cybercrime','Forgery or counterfeit'],'Corruption, drugs and public order':['Corruption','Drug-related','Illegal firearms','Public disorder or riot','Traffic or road crime'],'Other':['Other']};
+function vStats() {
+  $app.innerHTML = `<div class="wrap"><h2>Crime statistics</h2><div id="st" class="hint">Loading…</div><a class="btn" href="#home" style="margin-top:12px;justify-content:center">Back to home</a></div>`;
+  api('/api/public/stats').then(d => {
+    const max = Math.max(1, ...d.byCategory.map(c => c.n));
+    document.getElementById('st').innerHTML = `<div class="card"><b>${d.total}</b> reports received · <b>${d.resolved}</b> resolved</div><h3>Most reported</h3>${d.byCategory.map(c => `<div>${esc(c.category)} <span class="hint">${c.n}</span></div><div class="bar" style="width:${Math.round(c.n / max * 100)}%"></div>`).join('') || '<div class="hint">No reports yet.</div>'}<div class="hint">Counts of reports submitted through this portal only.</div>`;
+  }).catch(() => document.getElementById('st').textContent = 'Could not load statistics.');
+}
+function vKiosk() {
+  sessionStorage.setItem('kiosk', '1'); sessionStorage.removeItem('consent'); sessionStorage.setItem('rstage', 'privacy'); lsSet('draft', '{}');
+  location.hash = '#report';
+}
+function vSafety() {
+  $app.innerHTML = `<div class="wrap"><h2>Scams & safety</h2>
+    <div class="card"><b>Mobile money fraud</b><div class="hint">Never share your PIN or a one-time code. Staff will not ask for it. Be careful with "sent by mistake, please return" messages. Check the sender's name before you reverse or confirm money.</div></div>
+    <div class="card"><b>Calls and links</b><div class="hint">Do not click links from unknown senders. Hang up on callers who rush you to pay, and call the company back on its official number.</div></div>
+    <div class="card"><b>Keep evidence</b><div class="hint">Save messages, screenshots, transaction IDs and the number used, then attach them to your report.</div></div>
+    <a class="btn primary" href="#report" data-precat="Mobile money fraud" style="justify-content:center">Report a scam</a></div>`;
+}
+function vVictims() {
+  $app.innerHTML = `<div class="wrap"><h2>Victim support</h2>
+    <div class="sos"><b>999</b> or <b>112</b> &nbsp;Call now if you or someone is in danger.</div>
+    <div class="card"><b>After a crime</b><div class="hint">Get to a safe place. If you are hurt, get medical care and ask police for a medical report form (PF3). Keep clothing and anything related to the incident untouched.</div></div>
+    <div class="card"><b>Your report</b><div class="hint">Keep your reference number and PIN. You can reply to officers' questions from Track a report, even anonymously.</div></div>
+    <div class="card"><b>Complaints about police</b><div class="hint">You may make a written complaint about bribery, oppression or misconduct by an officer. Choose the Corruption category when you report.</div></div>
+    <a class="btn primary" href="#report" data-precat="" style="justify-content:center">Submit a Tip</a></div>`;
+}
+document.addEventListener('click', e => {
+  const f = e.target.closest('[data-fill]'); if (f) sessionStorage.setItem('fillref', f.dataset.fill);
+  const pc = e.target.closest('[data-precat]'); if (pc) { sessionStorage.removeItem('consent'); sessionStorage.setItem('rstage', 'privacy'); lsSet('draft', JSON.stringify({ ...loadDraft(), category: pc.dataset.precat })); }
+});
+
+/* ---------------- REPORT ---------------- */
+function loadDraft() { try { return JSON.parse(lsGet('draft') || '{}'); } catch { return {}; } }
+function vReport() {
+  if (sessionStorage.getItem('consent')) return vReportForm();
+  const st = sessionStorage.getItem('rstage') || 'privacy';
+  const bar = `<div class="offbar"><img src="/logo.png" alt="" style="height:56px;width:56px;background:#fff;border-radius:50%;padding:3px"><div><b>UGANDA POLICE FORCE</b><small>Online crime reporting · prototype</small></div></div>`;
+  if (st === 'privacy') {
+    $app.innerHTML = `${bar}<div class="wrap"><h2 style="text-align:center;font-size:26px">Privacy Statement</h2>
+    <div class="card"><div class="stmt">This website is designed to let you give tip information to Uganda Police to help prevent and detect crime and protect life and property.<br><br>You are not required to give your name or other personal information. However, failing to supply requested information may slow or prevent the investigation of your tip.<br><br>By voluntarily giving information on this page, you consent to Uganda Police using and keeping it. Information you give may be used for investigation and may be shared as required by law or with other agencies handling the matter.<br><br>Your report is also compared with Ugandan law to help officers respond faster. Personal information is handled in line with Ugandan data protection law (Data Protection and Privacy Act, 2019).</div></div>
+    <button class="btn primary" id="go" style="justify-content:center;font-size:17px;padding:16px">I understand</button></div>`;
+    document.getElementById('go').onclick = () => { sessionStorage.setItem('rstage', 'warn'); vReport(); };
+  } else if (st === 'warn') {
+    $app.innerHTML = `${bar}<div class="wrap"><div class="bigwarn">WARNING</div>
+    <div class="sos" style="margin-top:0;font-size:17px;text-align:center">⚠ <b>If this is an emergency, call 999 or 112. Do not submit this form.</b><br>This website cannot be used to report emergencies or an immediate threat to life.</div>
+    <div class="card"><div class="stmt">This form is used to report non-emergency crime and to give tips to Uganda Police.</div></div>
+    <div class="card"><div class="stmt"><b>Be specific.</b> Give the place, date and time, names or descriptions of people, vehicle or boda number plates, phone numbers, and the names of any social media accounts or websites involved.</div></div>
+    <h3>Indicate agreement</h3>
+    <label class="check"><input type="checkbox" class="ag"> <span class="stmt">I understand that repeatedly sending tips with no investigative value may result in my tips not being considered.</span></label>
+    <label class="check"><input type="checkbox" class="ag"> <span class="stmt">The information I give is correct to the best of my knowledge. I understand that knowingly giving false information to the police is an offence and can lead to imprisonment (Police Act, section 68).</span></label>
+    <button class="btn primary" id="go" style="justify-content:center;margin-top:14px;font-size:17px;padding:16px" disabled>I agree</button>
+    <div style="height:10px"></div><a class="btn" href="#home" style="justify-content:center;font-size:17px;padding:16px" id="cancel">Cancel</a></div>`;
+    const ag = [...document.querySelectorAll('.ag')], go = document.getElementById('go');
+    ag.forEach(c => c.onchange = () => go.disabled = !ag.every(x => x.checked));
+    go.onclick = () => { sessionStorage.setItem('rstage', 'cat'); vReport(); };
+    document.getElementById('cancel').onclick = () => sessionStorage.removeItem('rstage');
+  } else {
+    const have = new Set(META.categories), seen = new Set();
+    const groups = Object.entries(CATGROUPS).map(([g, list]) => [g, list.filter(c => have.has(c) && !seen.has(c) && (seen.add(c), true))]);
+    const rest = META.categories.filter(c => !seen.has(c)); if (rest.length) groups.push(['More', rest]);
+    $app.innerHTML = `${bar}<div class="wrap"><h2 style="font-size:24px">Please select a category that best classifies your report</h2>
+    ${groups.filter(([, l]) => l.length).map(([g, l]) => `<div class="grp">${esc(g)}</div>${l.map(c => `<button class="catcard" data-c="${esc(c)}"><b>${esc(c)}</b><small>${esc(CATDESC[c] || '')}</small></button>`).join('')}`).join('')}
+    <a class="btn" href="#home" style="justify-content:center;margin-top:14px">Go back</a></div>`;
+    $app.onclick = e => { const b = e.target.closest('[data-c]'); if (!b) return; lsSet('draft', JSON.stringify({ ...loadDraft(), category: b.dataset.c })); sessionStorage.setItem('consent', '1'); sessionStorage.removeItem('rstage'); $app.onclick = null; vReportForm(); };
+  }
+}
+let liveWatch = null;
+function startLive(ref, pin) {
+  if (!navigator.geolocation) return;
+  let last = 0;
+  liveWatch = navigator.geolocation.watchPosition(p => { if (Date.now() - last < 10000) return; last = Date.now(); api('/api/live', 'POST', { ref, pin, lat: p.coords.latitude, lng: p.coords.longitude }).catch(() => {}); }, () => {}, { enableHighAccuracy: true, maximumAge: 5000 });
+}
+function vReportForm() {
+  const d = loadDraft(); draftFiles = [];
+  const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  $app.innerHTML = `<div class="wrap"><h2>Report a crime</h2>
+  <form id="rf" novalidate>
+    <label>What happened?</label>
+    <div class="chips" id="cats">${META.categories.map(c => `<button type="button" class="chip ${d.category === c ? 'on' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <label for="desc">Describe it</label>
+    <textarea id="desc" maxlength="4000" placeholder="What happened, who was involved, anything that helps the police (clothes, vehicle number, direction they ran).">${esc(d.description || '')}</textarea>
+    <div class="row" style="margin-top:8px"><button type="button" class="btn sm" id="rec">🎙 Record voice message</button><span class="hint" id="recout"></span></div>
+    <audio id="recplay" controls hidden style="width:100%;margin-top:6px"></audio>
+    <div class="hint"><span id="cnt">0</span>/4000 · Do not include your own phone number here if you want to stay anonymous.</div>
+    <div class="row"><div><label for="dist">District</label><select id="dist"><option value="">Select…</option>${META.districts.map(x => `<option ${d.district === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+    <div><label for="place">Place or landmark</label><input id="place" maxlength="120" placeholder="e.g. Nakawa market" value="${esc(d.place || '')}"></div></div>
+    <button type="button" class="btn sm" id="gps" style="margin-top:10px">📍 Add my GPS location</button> <span class="hint" id="gpsout"></span>
+    <label class="check"><input type="checkbox" id="live"> <span>Share my live location with police while I stay on this page (for fire, mob justice, armed robbery).</span></label>
+    <div class="card" style="margin-top:12px"><b>Subject information</b>
+      <div class="hint">Do you have any information about who committed the crime?</div>
+      <label class="check"><input type="radio" name="subj" id="sy"> <span>Yes</span></label><label class="check"><input type="radio" name="subj" id="sn" checked> <span>No</span></label>
+      <div id="subj" hidden><div class="hint">Select the identifiers you know.</div>
+      ${[['sname', 'Name'], ['sage', 'Approximate age'], ['sphone', 'Phone number'], ['ssocial', 'Social media account'], ['semail', 'Email'], ['saddr', 'Address'], ['sveh', 'Vehicle or number plate']].map(([k, l]) => `<label class="check"><input type="checkbox" data-k="${k}"> <span>${l}</span></label><input id="${k}" maxlength="120" placeholder="${l}" hidden>`).join('')}
+      <label for="sus">Other details (clothing, direction they went)</label><textarea id="sus" maxlength="600"></textarea></div></div>
+    <label for="when">When did it happen?</label>
+    <input type="datetime-local" id="when" max="${nowLocal}" value="${esc(d.when || nowLocal)}">
+    <label for="files">Photos or video (optional, up to 5)</label>
+    <input type="file" id="files" accept="image/*,video/mp4" multiple>
+    <div class="evi" id="prev" style="margin-top:8px"></div>
+    <label class="check"><input type="checkbox" id="anon" checked> <span>Report anonymously. Your phone number or name will not be saved.</span></label>
+    <div id="contact" hidden><div class="row"><div><label for="nm">Your name</label><input id="nm" maxlength="80"></div><div><label for="ph">Phone number</label><input id="ph" inputmode="tel" placeholder="+2567…"></div></div><div class="hint">Only police officers handling your case can see this.</div></div>
+    <div id="ferr"></div>
+    <button class="btn primary" id="sub" style="justify-content:center;margin-top:10px">Submit report</button>
+  </form></div>`;
+  const $ = id => document.getElementById(id);
+  let cat = d.category || '';
+  const save = () => lsSet('draft', JSON.stringify({ category: cat, description: $('desc').value, district: $('dist').value, place: $('place').value, when: $('when').value }));
+  $('cnt').textContent = $('desc').value.length;
+  $('desc').oninput = () => { $('cnt').textContent = $('desc').value.length; save(); };
+  ['dist', 'place', 'when'].forEach(i => $(i).onchange = $(i).oninput = save);
+  $('cats').onclick = e => { const b = e.target.closest('[data-cat]'); if (!b) return; cat = b.dataset.cat; document.querySelectorAll('#cats .chip').forEach(c => c.classList.toggle('on', c === b)); save(); };
+  $('anon').onchange = () => $('contact').hidden = $('anon').checked;
+  let geo = null;
+  $('gps').onclick = () => {
+    if (!navigator.geolocation) { $('gpsout').textContent = 'GPS not available on this device.'; return; }
+    $('gpsout').textContent = 'Getting location…';
+    navigator.geolocation.getCurrentPosition(p => { geo = { lat: +p.coords.latitude.toFixed(5), lng: +p.coords.longitude.toFixed(5) }; $('gpsout').textContent = `Saved ✓ (${geo.lat}, ${geo.lng})`; },
+      () => { $('gpsout').textContent = 'Could not get location. You can still submit.'; }, { enableHighAccuracy: true, timeout: 10000 });
+  };
+  $('sy').onchange = $('sn').onchange = () => $('subj').hidden = !$('sy').checked;
+  document.querySelectorAll('#subj [data-k]').forEach(c => c.onchange = () => { $(c.dataset.k).hidden = !c.checked; });
+  const suspectText = () => !$('sy').checked ? '' : [...document.querySelectorAll('#subj [data-k]')].filter(c => c.checked && $(c.dataset.k).value.trim()).map(c => c.nextElementSibling.textContent + ': ' + $(c.dataset.k).value.trim()).concat($('sus').value.trim()).filter(Boolean).join('; ');
+  let rec = null, audio = null, transcript = '', sr = null, chunks = [];
+  $('rec').onclick = async () => {
+    if (rec && rec.state === 'recording') { rec.stop(); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) { $('recout').textContent = 'Recording is not supported in this browser.'; return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = []; transcript = ''; rec = new MediaRecorder(stream);
+      rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+      rec.onstop = () => {
+        stream.getTracks().forEach(t => t.stop()); if (sr) try { sr.stop(); } catch {}
+        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        if (blob.size > 9 * 1024 * 1024) { $('recout').textContent = 'Recording too long. Keep it under about 5 minutes.'; return; }
+        const fr = new FileReader(); fr.onload = () => { audio = { mime: blob.type.split(';')[0], data: fr.result.split(',')[1] }; };
+        fr.readAsDataURL(blob); $('recplay').src = URL.createObjectURL(blob); $('recplay').hidden = false;
+        $('rec').textContent = '🎙 Record again'; $('recout').textContent = 'Voice message saved ✓' + (transcript ? '' : ' (no text captured)');
+      };
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) { sr = new SR(); sr.continuous = true; sr.interimResults = false; sr.lang = 'en-UG'; sr.onresult = e => { transcript = [...e.results].map(r => r[0].transcript).join(' '); }; try { sr.start(); } catch {} }
+      rec.start(); $('rec').textContent = '⏹ Stop recording'; $('recout').textContent = 'Recording…';
+    } catch { $('recout').textContent = 'Microphone permission was denied.'; }
+  };
+  $('files').onchange = async () => {
+    draftFiles = []; $('prev').innerHTML = '';
+    for (const f of [...$('files').files].slice(0, 5)) {
+      try {
+        const item = await prepFile(f); draftFiles.push(item);
+        const el = item.mime.startsWith('video') ? document.createElement('video') : document.createElement('img');
+        el.src = `data:${item.mime};base64,${item.data}`; $('prev').appendChild(el);
+      } catch (x) { $('ferr').innerHTML = err(x.message); }
+    }
+  };
+  $('rf').onsubmit = async e => {
+    e.preventDefault(); $('ferr').innerHTML = '';
+    if (!cat) return $('ferr').innerHTML = err('Choose what happened.');
+    const anon = $('anon').checked;
+    $('sub').disabled = true; $('sub').textContent = 'Submitting…';
+    try {
+      const r = await api('/api/reports', 'POST', { category: cat, description: $('desc').value, district: $('dist').value, place: $('place').value, occurred_at: $('when').value, anonymous: anon, name: $('nm').value, phone: $('ph').value, lat: geo && geo.lat, lng: geo && geo.lng, evidence: draftFiles, audio, audio_transcript: transcript, suspect: suspectText(), share_live: $('live').checked, kiosk: !!sessionStorage.getItem('kiosk') });
+      if ($('live').checked) { if (!geo && navigator.geolocation) navigator.geolocation.getCurrentPosition(() => {}, () => {}); startLive(r.ref, r.pin); r.live = true; }
+      lsSet('draft', '{}'); sessionStorage.removeItem('consent'); if (!sessionStorage.getItem('kiosk')) lsSet('myrefs', ((lsGet('myrefs') || '') + ',' + r.ref).replace(/^,/, ''));
+      showReceipt(r);
+    } catch (x) { $('ferr').innerHTML = err(x.message); $('sub').disabled = false; $('sub').textContent = 'Submit report'; }
+  };
+}
+function prepFile(f) {
+  return new Promise((resolve, reject) => {
+    if (f.type === 'video/mp4') {
+      if (f.size > 9 * 1024 * 1024) return reject(new Error('Video is too big (max 9 MB). Send a shorter clip or a photo.'));
+      const r = new FileReader(); r.onload = () => resolve({ name: f.name, mime: 'video/mp4', data: r.result.split(',')[1] }); return r.readAsDataURL(f);
+    }
+    if (!f.type.startsWith('image/')) return reject(new Error('Only photos and MP4 video are allowed.'));
+    const img = new Image(), u = URL.createObjectURL(f);
+    img.onload = () => {
+      const s = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u);
+      resolve({ name: f.name, mime: 'image/jpeg', data: c.toDataURL('image/jpeg', .8).split(',')[1] });
+    };
+    img.onerror = () => reject(new Error('Could not read that image.')); img.src = u;
+  });
+}
+function adviceHtml(a, station, officer) {
+  if (!a) return '';
+  const li = arr => arr.map(x => `<li>${esc(x)}</li>`).join('');
+  return `${station || officer ? `<div class="ok">🏢 Handled by <b>${esc(station || 'police')}</b>${officer ? ' · 👮 Officer: <b>' + esc(officer) + '</b>' : ' · officer not yet assigned'}</div>` : ''}
+    <div class="card adv"><h3>✅ What you should do now</h3><ul>${li(a.now)}</ul></div>
+    ${a.keep.length ? `<div class="card adv"><h3>📎 Keep this safe</h3><ul>${li(a.keep)}</ul></div>` : ''}
+    <div class="card adv"><h3>🚓 What happens next</h3><ol>${li(a.next)}</ol>${a.police.length ? `<div class="hint">Police will usually: ${a.police.map(esc).join('; ')}.</div>` : ''}<div class="hint">How fast police respond depends on the station and the cases officers are handling.</div></div>
+    ${a.laws.length ? `<div class="card adv"><h3>⚖ The law that may apply</h3>${a.laws.map(l => `<div class="hint"><b>${esc(l.source)} · ${esc(l.ref)}</b><br>${esc(l.text)}…</div>`).join('')}<div class="hint">For information only. It is not legal advice, and police decide the charge.</div></div>` : ''}`;
+}
+function showReceipt(r) {
+  if (sessionStorage.getItem('kiosk')) { setTimeout(() => { if (sessionStorage.getItem('kiosk') && document.getElementById('cp')) { lsSet('draft', '{}'); vKiosk(); vReport(); } }, 120000); }
+  $app.innerHTML = `<div class="wrap"><h2>Report received</h2>
+    ${sessionStorage.getItem('kiosk') ? '<div class="warn"><b>Lobby kiosk:</b> write down or photograph the reference and PIN, or ask the desk officer for a printed slip. This screen clears in 2 minutes.</div>' : ''}
+    <p class="lead">Keep these two numbers. You need <b>both</b> to check progress. We cannot recover them, because we do not know who you are.</p>
+    <div class="card refbox">${esc(r.ref)}</div><div class="card pinbox">PIN ${esc(r.pin)}</div>
+    ${r.emergency ? `<div class="sos"><b>This looks like an emergency.</b> Call <b>999</b> or <b>112</b> now if you can. Police were alerted as urgent.</div>` : ''}
+    ${r.station ? `<div class="ok">🏢 Sent to <b>${esc(r.station)}</b></div>` : ''}
+    ${r.live ? `<div class="ok">📍 Live location is being shared. Keep this page open.</div>` : ''}
+    ${r.ask && r.ask.length ? `<div class="card"><b>Police may ask</b><div class="hint">${r.ask.map(esc).join('<br>')}<br>You can answer from Track a report.</div></div>` : ''}
+    ${adviceHtml(r.advice)}
+    ${r.priority !== 'normal' ? `<div class="ok">Your report was marked <b>${esc(r.priority)}</b> priority for faster review.</div>` : ''}
+    <button class="btn primary" id="cp" style="justify-content:center">Copy reference + PIN</button><div style="height:10px"></div>
+    <a class="btn" href="#track" data-fill="${esc(r.ref)}" style="justify-content:center">Track this report</a><div style="height:10px"></div>
+    <a class="btn" href="#home" style="justify-content:center">Back to home</a>
+    <div class="sos"><b>999</b> or <b>112</b> If you or someone is in danger now, call immediately.</div></div>`;
+  document.getElementById('cp').onclick = e => { const t = `SafeReport UG\nReference: ${r.ref}\nPIN: ${r.pin}`; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => e.target.textContent = 'Copied ✓', () => e.target.textContent = 'Copy failed. Write them down.'); };
+}
+
+/* ---------------- TRACK ---------------- */
+const FLOW = ['Received', 'Under review', 'Assigned to officer', 'Resolved'];
+function vTrack() {
+  const pre = sessionStorage.getItem('fillref') || ''; sessionStorage.removeItem('fillref');
+  $app.innerHTML = `<div class="wrap"><h2>Track a report</h2>
+    <form id="tf"><label for="ref">Reference number</label><input id="ref" placeholder="UG-1234" value="${esc(pre)}" autocapitalize="characters">
+    <label for="pin">PIN</label><input id="pin" inputmode="numeric" maxlength="12" placeholder="6-digit PIN" type="password">
+    <div id="terr"></div><button class="btn primary" style="justify-content:center;margin-top:14px">Check status</button></form><div id="tres"></div></div>`;
+  document.getElementById('tf').onsubmit = async e => { e.preventDefault(); await loadTrack(); };
+}
+let trackCreds = null;
+async function loadTrack() {
+  const ref = document.getElementById('ref').value.trim(), pin = document.getElementById('pin').value.trim();
+  document.getElementById('terr').innerHTML = '';
+  try { const r = await api('/api/track', 'POST', { ref, pin }); trackCreds = { ref, pin }; renderTrack(r); }
+  catch (x) { document.getElementById('terr').innerHTML = err(x.message); document.getElementById('tres').innerHTML = ''; }
+}
+function renderTrack(r) {
+  setTimeout(() => { const t = document.getElementById('tres'); if (t) t.insertAdjacentHTML('beforeend', adviceHtml(r.advice, r.station, r.officer)); }, 0);
+  const idx = FLOW.indexOf(r.status), rejected = r.status === 'Rejected';
+  const when = s => { const h = r.history.filter(x => x.status === s).pop(); return h ? `<small>${fmt(h.created_at)}</small>` : ''; };
+  document.getElementById('tres').innerHTML = `<div class="card" style="margin-top:16px">
+    <div class="case-head"><b>${esc(r.ref)}</b><span class="badge s-${esc(r.status.split(' ')[0])}">${esc(r.status)}</span></div>
+    <div class="meta" style="color:var(--mute);font-size:13px">${esc(r.category)} · ${esc(r.district)}${r.place ? ', ' + esc(r.place) : ''} · ${fmt(r.occurred_at)} · ${r.anonymous ? 'Anonymous' : 'With contact details'}</div>
+    <p style="margin:8px 0">${esc(r.description)}</p>
+    ${r.evidence_count ? `<div class="hint">${r.evidence_count} evidence file(s) attached</div>` : ''}
+    <div class="timeline">${rejected ? `<div class="step done"><span class="dot"></span><div>Received${when('Received')}</div></div><div class="step done"><span class="dot" style="background:var(--red);border-color:var(--red)"></span><div>Rejected by police${when('Rejected')}</div></div>` :
+      FLOW.map((s, i) => `<div class="step ${i <= idx ? 'done' : ''}"><span class="dot"></span><div>${esc(s)}${i <= idx ? when(s) : ''}</div></div>`).join('')}</div></div>
+    <div class="card"><b>Messages with police</b>
+      <div class="msgs">${r.messages.length ? r.messages.map(m => `<div class="msg ${m.sender === 'citizen' ? 'me' : ''}">${esc(m.body)}<small>${m.sender === 'citizen' ? 'You' : 'Police'} · ${fmt(m.created_at)}</small></div>`).join('') : '<div class="hint">No messages yet. Officers may ask you follow-up questions here.</div>'}</div>
+      <form id="mf" class="row"><input id="mb" maxlength="1500" placeholder="Add information or reply to police"><button class="btn sm primary" style="flex:none">Send</button></form></div>`;
+  document.getElementById('mf').onsubmit = async e => {
+    e.preventDefault(); const b = document.getElementById('mb').value.trim(); if (!b) return;
+    try { await api('/api/track/message', 'POST', { ...trackCreds, body: b }); const r2 = await api('/api/track', 'POST', trackCreds); renderTrack(r2); } catch (x) { alert(x.message); }
+  };
+}
+
+/* ---------------- POLICE ---------------- */
+async function vPolice() {
+  try { ME = (await api('/api/me')).user; } catch { ME = null; }
+  if (!ME) return policeLogin();
+  $app.innerHTML = `<div class="wrap wide">
+    <div class="case-head"><div><h2 style="margin:0">Police dashboard</h2><div class="hint">${esc(ME.full_name)} · ${esc(ME.role)}${ME.station ? ' · ' + esc(ME.station) : ''}</div>
+      ${LAST_LOGIN && LAST_LOGIN.last_login ? `<div class="hint">Previous sign-in: ${fmt(LAST_LOGIN.last_login.created_at)}${LAST_LOGIN.last_login.lat != null ? ` · <a style="color:var(--accent)" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=${+LAST_LOGIN.last_login.lat}&mlon=${+LAST_LOGIN.last_login.lng}#map=15/${+LAST_LOGIN.last_login.lat}/${+LAST_LOGIN.last_login.lng}">location</a>` : ''}. Not you? Tell your administrator.</div>` : ''}
+      ${LAST_LOGIN && LAST_LOGIN.outside_ug ? '<div class="warn">This sign-in was recorded outside Uganda and has been flagged.</div>' : ''}${LAST_LOGIN && LAST_LOGIN.enrolled ? '<div class="ok">Face ID enrolled. Future sign-ins will check your face against this National ID.</div>' : ''}</div><button class="btn sm danger" id="lo">Log out</button></div>
+    <div class="sub" id="psub">
+      <button class="chip" data-pt="dashboard">Overview</button><button class="chip" data-pt="cases">Cases</button><button class="chip" data-pt="walkin">Walk-in report</button><button class="chip" data-pt="stations">Posts</button>
+      ${ME.role !== 'officer' ? '<button class="chip" data-pt="logins">Sign-ins</button>' : ''}${ME.role === 'admin' ? '<button class="chip" data-pt="users">Users</button><button class="chip" data-pt="audit">Audit log</button>' : ''}
+      ${ME.role !== 'officer' ? '<a class="chip" href="/api/police/export.csv" style="text-decoration:none">⬇ Export CSV</a>' : ''}
+    </div><div id="pbody"></div></div>`;
+  document.getElementById('lo').onclick = async () => { clearInterval(alertTimer); alertSince = null; await api('/api/logout', 'POST', {}); ME = null; vPolice(); };
+  document.getElementById('psub').onclick = e => { const b = e.target.closest('[data-pt]'); if (b) { policeTab = b.dataset.pt; paintPolice(); } };
+  startAlerts();
+  paintPolice();
+}
+function paintPolice() {
+  document.querySelectorAll('#psub [data-pt]').forEach(b => b.classList.toggle('on', b.dataset.pt === policeTab));
+  ({ dashboard: pDash, cases: pCases, users: pUsers, audit: pAudit, logins: pLogins, stations: pStations, walkin: pWalkin }[policeTab] || pDash)();
+}
+/* ---- Police sign-in: National ID number + password ---- */
+let LAST_LOGIN = null;
+const note = (cls, t) => `<div class="${cls}" role="status">${t}</div>`;
+function policeLogin() {
+  $app.innerHTML = `<div class="wrap"><img class="biglogo" src="/logo.png" alt="Uganda Police crest"><h2>Police sign in</h2><p class="lead">For authorised Uganda Police officers only. Every sign-in is logged.</p>
+  <form id="lf"><label for="nin">National ID number (NIN)</label><input id="nin" autocomplete="off" autocapitalize="characters" maxlength="14" placeholder="CM…………" spellcheck="false">
+  <label for="p">Password</label><input id="p" type="password" autocomplete="current-password"><div id="lerr"></div>
+  <button class="btn primary" style="justify-content:center;margin-top:14px">Sign in</button></form>
+  <div class="card" style="margin-top:18px"><b>Demo accounts (NIN / password)</b><div class="hint">CM00000000OF01 / Officer@123 (officer)<br>CM00000000CM01 / Commander@123 (commander)<br>CM00000000AD01 / Admin@123 (admin)<br>Change these before real use.</div></div></div>`;
+  document.getElementById('lf').onsubmit = async e => {
+    e.preventDefault(); const b = e.target.querySelector('button'); b.disabled = true;
+    try {
+      const r = await api('/api/login/start', 'POST', { nin: document.getElementById('nin').value, password: document.getElementById('p').value });
+      LAST_LOGIN = r; ME = r.user; vPolice();
+    } catch (x) { document.getElementById('lerr').innerHTML = err(x.message); b.disabled = false; }
+  };
+}
+
+const bars = (rows, max) => { const m = max || Math.max(1, ...rows.map(r => r.n)); return rows.map(r => `<div class="bar"><span class="k" title="${esc(r.k)}">${esc(r.k)}</span><i style="width:${Math.round(r.n / m * 100)}%"></i><em>${r.n}</em></div>`).join('') || '<div class="hint">No data yet.</div>'; };
+async function pDash() {
+  const body = document.getElementById('pbody'); body.innerHTML = 'Loading…';
+  const s = await api('/api/police/stats');
+  // trend line (SVG)
+  const days = s.byDay, W = 460, H = 120, mx = Math.max(1, ...days.map(d => d.n));
+  const pts = days.map((d, i) => [days.length > 1 ? 10 + i * (W - 20) / (days.length - 1) : W / 2, H - 14 - d.n / mx * (H - 30)]);
+  const trend = days.length ? `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Reports per day, last 14 days"><polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="${pts.map(p => p.join(',')).join(' ')}"/>${pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="var(--accent)"><title>${esc(days[i].k)}: ${days[i].n}</title></circle>`).join('')}<text x="4" y="${H - 2}" font-size="10" fill="var(--mute)">${esc(days[0].k)}</text><text x="${W - 4}" y="${H - 2}" font-size="10" text-anchor="end" fill="var(--mute)">${esc(days[days.length - 1].k)}</text></svg>` : '<div class="hint">No reports in the last 14 days.</div>';
+  // hotspot map: Uganda bounding box
+  const MW = 320, MH = 300, lat0 = -1.5, lat1 = 4.3, lng0 = 29.5, lng1 = 35.1;
+  const col = { urgent: '#ff6b6b', high: '#f5b545', normal: '#3ecf9f' };
+  const map = `<svg viewBox="0 0 ${MW} ${MH}" width="100%" style="max-height:300px" role="img" aria-label="Map of GPS-tagged reports across Uganda"><rect width="${MW}" height="${MH}" rx="10" fill="var(--panel2)"/>
+   ${s.points.map(p => `<circle cx="${(p.lng - lng0) / (lng1 - lng0) * MW}" cy="${MH - (p.lat - lat0) / (lat1 - lat0) * MH}" r="7" fill="${col[p.priority]}" fill-opacity=".55" stroke="${col[p.priority]}"><title>${esc(p.ref)} · ${esc(p.category)}</title></circle>`).join('')}
+   <text x="8" y="16" font-size="10" fill="var(--mute)">N ↑ (GPS-tagged reports)</text></svg>`;
+  body.innerHTML = `<div class="tiles"><div class="tile"><b>${s.total}</b><span>Total reports</span></div><div class="tile"><b>${s.open}</b><span>Open</span></div><div class="tile"><b style="color:var(--red)">${s.urgent}</b><span>Urgent &amp; open</span></div><div class="tile"><b style="color:var(--accent)">${s.resolved}</b><span>Resolved</span></div></div>
+  <div class="grid2"><div class="card"><h3 style="margin-top:0">Reports per day (14 days)</h3>${trend}</div><div class="card"><h3 style="margin-top:0">Hotspot map</h3>${map}<div class="hint"><span style="color:var(--red)">●</span> urgent <span style="color:var(--amber)">●</span> high <span style="color:var(--accent)">●</span> normal</div></div>
+  <div class="card"><h3 style="margin-top:0">By crime type</h3>${bars(s.byCategory)}</div><div class="card"><h3 style="margin-top:0">Top districts</h3>${bars(s.byDistrict)}<h3>By status</h3>${bars(s.byStatus)}</div></div>`;
+}
+async function pStations() {
+  const $ = id => document.getElementById(id);
+  const body = document.getElementById('pbody'), { stations } = await api('/api/police/stations');
+  body.innerHTML = `<div class="card"><h3 style="margin-top:0">Register a police post</h3>
+    <div class="hint">New cases inside the post's radius are sent to it automatically and pop up for its officers.</div>
+    <label for="sn2">Post or station name</label><input id="sn2" maxlength="100">
+    <label for="sd">District</label><select id="sd"><option value="">Select</option>${META.districts.map(x => `<option>${esc(x)}</option>`).join('')}</select>
+    <div class="row"><button class="btn sm" id="sgps" type="button">📍 Use my current location</button><span class="hint" id="sloc"></span></div>
+    <div class="grid2"><div><label for="sla">Latitude</label><input id="sla" inputmode="decimal"></div><div><label for="sln">Longitude</label><input id="sln" inputmode="decimal"></div></div>
+    <label for="srad">Area covered (km radius)</label><input id="srad" inputmode="decimal" value="5">
+    <label for="sph">Post phone (optional)</label><input id="sph" inputmode="tel">
+    <button class="btn primary" id="ssave" style="justify-content:center;margin-top:10px">Register post</button><div class="hint" id="smsg"></div></div>
+    <h3>Registered posts</h3>${stations.map(x => `<div class="card"><b>${esc(x.name)}</b><div class="hint">${esc(x.district || '')} · ${x.radius_km} km · ${x.open_cases} open case${x.open_cases === 1 ? '' : 's'}${x.phone ? ' · ' + esc(x.phone) : ''}</div>${ME.role !== 'officer' ? `<button class="btn sm" data-rm="${x.id}">Remove</button>` : ''}</div>`).join('') || '<div class="hint">No posts yet.</div>'}`;
+  $('sgps').onclick = () => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => { $('sla').value = p.coords.latitude.toFixed(6); $('sln').value = p.coords.longitude.toFixed(6); $('sloc').textContent = 'Location set ✓'; }, () => $('sloc').textContent = 'Location denied. Type it in.', { enableHighAccuracy: true }) : 0;
+  $('ssave').onclick = async () => { try { const r = await api('/api/police/stations', 'POST', { name: $('sn2').value, district: $('sd').value, lat: $('sla').value, lng: $('sln').value, radius_km: $('srad').value, phone: $('sph').value }); if (!ME.station) ME.station = r.station; $('smsg').textContent = 'Registered' + (r.moved ? `; ${r.moved} waiting report(s) assigned` : ''); pStations(); } catch (x) { $('smsg').textContent = x.message; } };
+  body.onclick = async e => { const b = e.target.closest('[data-rm]'); if (b && confirm('Remove this post? Its cases become unassigned.')) { await api('/api/police/stations/' + b.dataset.rm, 'DELETE'); pStations(); } };
+}
+// ---- new-case alerts for the officer's station: popup, beep, vibration, system notification ----
+let alertSince = null, alertTimer = null;
+function beep() { try { const c = new (window.AudioContext || window.webkitAudioContext)(), o = c.createOscillator(); o.frequency.value = 880; o.connect(c.destination); o.start(); setTimeout(() => { o.stop(); c.close(); }, 450); } catch {} }
+function popAlert(a) {
+  const d = document.createElement('div'); d.className = 'sos'; d.style.cssText = 'position:fixed;top:10px;left:10px;right:10px;z-index:99;margin:0;cursor:pointer;box-shadow:0 6px 24px #000a';
+  d.innerHTML = `<b>🚨 New ${esc(a.priority)} case${a.station ? ' · ' + esc(a.station) : ''}</b><br>${esc(a.category)} · ${esc(a.district)}${a.place ? ', ' + esc(a.place) : ''} · ${esc(a.ref)}<br><small>Tap to open</small>`;
+  d.onclick = () => { d.remove(); policeTab = 'cases'; paintPolice(); openCase(a.ref); }; document.body.appendChild(d); setTimeout(() => d.remove(), 30000);
+  beep(); if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+  try { if (window.Notification && Notification.permission === 'granted') new Notification('New ' + a.priority + ' case: ' + a.category, { body: a.ref + ' · ' + a.district + (a.place ? ', ' + a.place : '') }); } catch {}
+}
+function startAlerts() {
+  clearInterval(alertTimer); alertSince = null; try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+  const tick = async () => { if (!ME) return clearInterval(alertTimer); try { const r = await api('/api/police/alerts' + (alertSince === null ? '' : '?since=' + alertSince)); if (alertSince !== null) r.alerts.forEach(popAlert); alertSince = r.max; } catch {} };
+  tick(); alertTimer = setInterval(tick, 6000);
+}
+
+/* ---- Walk-in report: officer records a complaint made in person ---- */
+function walkinSlip(r) {
+  const url = location.origin + '/#track/' + r.ref; let qr = '';
+  try { const q = qrcode(0, 'M'); q.addData(url); q.make(); qr = q.createSvgTag({ cellSize: 4, margin: 2 }); } catch {}
+  const row = (k, v) => `<tr><td>${k}</td><td><b>${esc(v)}</b></td></tr>`;
+  document.getElementById('pbody').innerHTML = `<div id="slip" class="slip">
+    <div class="slip-h"><img src="/logo.png" alt="" width="64" height="64"><div><b style="font-size:18px">UGANDA POLICE</b><br>Complaint receipt${r.station ? ' · ' + esc(r.station) : ''}</div></div>
+    <table>${row('OB number', r.ob_number)}${row('Reference', r.ref)}${row('PIN (keep secret)', r.pin)}${row('Recorded', fmt(r.created_at) + ' UTC')}${row('Complainant', r.name)}${row('ID', r.id_label)}${row('Crime', r.category)}${row('Priority', r.priority)}${row('Recording officer', r.officer)}</table>
+    ${r.signature ? `<div style="margin-top:8px;font-size:13px">Complainant signature / thumbprint</div><img class="sigimg" alt="" src="${esc(r.signature)}">` : '<div style="margin-top:8px;font-size:13px">Not signed</div>'}
+    ${r.advice ? `<div style="margin-top:10px;font-size:13px"><b>What you should do now</b><ul>${r.advice.now.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+    <div class="qr">${qr}<small>Scan to track: ${esc(url)}</small></div>
+    <p class="slip-note">Keep this slip. Use the reference and PIN on the Uganda Police e-Crime portal to check progress. Emergencies: call 999 or 112.</p></div>
+    ${r.emergency ? '<div class="sos">⚠ This looks like an emergency. Dispatch now if not done.</div>' : ''}
+    <div class="row"><button class="btn primary" id="wprint" style="justify-content:center">🖨 Print receipt</button><button class="btn" id="wnew" style="justify-content:center">New walk-in</button><button class="btn" id="wopen" style="justify-content:center">Open case</button></div>
+    <div class="hint">${r.phone ? 'An SMS with the reference and PIN was sent to the complainant (demo inbox: /phone.html).' : 'No phone number was given, so no SMS was sent.'}</div>`;
+  document.getElementById('wprint').onclick = () => window.print();
+  document.getElementById('wnew').onclick = pWalkin;
+  document.getElementById('wopen').onclick = () => { policeTab = 'cases'; paintPolice(); openCase(r.ref); };
+}
+async function pWalkin() {
+  const $ = id => document.getElementById(id), body = $('pbody');
+  let station = null; try { station = (await api('/api/police/stations')).stations.find(x => x.name === ME.station) || null; } catch {}
+  const nowL = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  let lat = station ? station.lat : '', lng = station ? station.lng : '';
+  body.innerHTML = `<div class="card"><h3 style="margin-top:0">Walk-in report</h3><div style="float:right"><a class="btn sm" href="#kiosk" target="_blank">🖥 Lobby kiosk</a></div><div class="hint">Record a complaint made in person. This replaces the paper Occurrence Book entry. You get an OB number and a printed receipt with a QR code.</div></div>
+  <div class="card"><h3 style="margin-top:0">1 · Complainant</h3>
+    <label for="wn">Full name</label><input id="wn" maxlength="80">
+    <label for="wp">Phone (for SMS updates)</label><input id="wp" inputmode="tel" placeholder="+2567…">
+    <label for="wit">ID type</label><select id="wit"><option>National ID</option><option>Passport</option><option>Driving permit</option><option>Refugee ID</option><option>None</option></select>
+    <label for="win">ID number</label><input id="win" maxlength="30">
+    <label class="check"><input type="checkbox" id="wseen"> <span>I have seen the original ID</span></label></div>
+  <div class="card"><h3 style="margin-top:0">2 · What happened</h3>
+    <label for="wc">Crime category</label><select id="wc">${META.categories.map(c => `<option>${esc(c)}</option>`).join('')}</select>
+    <label for="wdist">District</label><select id="wdist">${META.districts.map(d => `<option ${station && station.district === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select>
+    <label for="wo">When did it happen?</label><input id="wo" type="datetime-local" value="${nowL}" max="${nowL}">
+    <label for="wpl">Place</label><input id="wpl" maxlength="120" placeholder="Village, trading centre, street">
+    <div class="row"><button class="btn sm" id="wgps" type="button">📍 Use my location</button><span class="hint" id="wloc">${station ? 'Using ' + esc(station.name) + ' location' : 'No location set'}</span></div></div>
+  <div class="card"><h3 style="margin-top:0">3 · Statement</h3>
+    <textarea id="wd" rows="7" maxlength="4000" placeholder="Type the statement in the complainant's own words…"></textarea>
+    <div class="row"><button class="btn sm" id="wdict" type="button">🎙 Dictate</button><button class="btn sm" id="wrec" type="button">⏺ Record audio statement</button><span class="hint" id="wrecout"></span></div>
+    <audio id="wplay" controls hidden style="width:100%;margin-top:6px"></audio></div>
+  <div class="card"><h3 style="margin-top:0">4 · Suspect (optional)</h3><textarea id="wsus" rows="3" maxlength="1000" placeholder="Names, description, vehicle, direction they went"></textarea></div>
+  <div class="card"><h3 style="margin-top:0">5 · Law check and questions to ask</h3><button class="btn sm" id="wan" type="button">⚖ Analyse statement</button><div id="wanout" style="margin-top:8px"></div></div>
+  <div class="card"><h3 style="margin-top:0">6 · Read back, then signature or thumbprint</h3><div class="hint">Read the statement back to the complainant. They sign, or press a thumb, in the box.</div>
+    <canvas id="wsig" width="520" height="170" style="width:100%;background:#fff;border-radius:10px;touch-action:none;margin-top:6px"></canvas><button class="btn sm" id="wclr" type="button">Clear</button></div>
+  <button class="btn primary" id="wsub" style="justify-content:center">Save and print receipt</button><div class="warn" id="wmsg" hidden></div>`;
+  $('wit').onchange = () => { $('win').disabled = $('wseen').disabled = $('wit').value === 'None'; };
+  $('wgps').onclick = () => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => { lat = p.coords.latitude; lng = p.coords.longitude; $('wloc').textContent = 'Location set ✓'; }, () => $('wloc').textContent = 'Location denied', { enableHighAccuracy: true }) : 0;
+  // dictation (browser speech recognition)
+  let sr = null;
+  $('wdict').onclick = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) { $('wrecout').textContent = 'Dictation is not supported in this browser.'; return; }
+    if (sr) { sr.stop(); sr = null; $('wdict').textContent = '🎙 Dictate'; return; }
+    sr = new SR(); sr.continuous = true; sr.interimResults = false; sr.lang = 'en-UG';
+    sr.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) $('wd').value += (($('wd').value && !/\s$/.test($('wd').value)) ? ' ' : '') + e.results[i][0].transcript.trim(); };
+    sr.onend = () => { if (sr) try { sr.start(); } catch {} };
+    sr.start(); $('wdict').textContent = '⏹ Stop dictation';
+  };
+  // audio statement
+  let rec = null, audio = null, chunks = [];
+  $('wrec').onclick = async () => {
+    if (rec && rec.state === 'recording') { rec.stop(); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) { $('wrecout').textContent = 'Recording is not supported here.'; return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); chunks = []; rec = new MediaRecorder(stream);
+      rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+      rec.onstop = () => { stream.getTracks().forEach(t => t.stop()); const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' }); const fr = new FileReader(); fr.onload = () => { audio = { mime: blob.type.split(';')[0], data: fr.result.split(',')[1] }; }; fr.readAsDataURL(blob); $('wplay').src = URL.createObjectURL(blob); $('wplay').hidden = false; $('wrec').textContent = '⏺ Record again'; $('wrecout').textContent = 'Audio saved ✓'; };
+      rec.start(); $('wrec').textContent = '⏹ Stop recording'; $('wrecout').textContent = 'Recording…';
+    } catch { $('wrecout').textContent = 'Microphone permission denied.'; }
+  };
+  // law check + interview questions
+  $('wan').onclick = async () => {
+    $('wanout').textContent = 'Analysing…';
+    try {
+      const a = await api('/api/police/analyse', 'POST', { text: $('wd').value + ' ' + $('wsus').value, category: $('wc').value });
+      $('wanout').innerHTML = `${a.emergency ? '<div class="sos" style="margin-top:0">⚠ Looks like an emergency. Dispatch patrol now.</div>' : ''}
+        ${a.serious ? '<div class="warn"><b>Serious case (' + esc(a.priority) + ').</b> Take the statement in a private room, ask the questions below, record the audio statement, read it back, and get the signature.</div>' : '<div class="ok"><b>Minor case.</b> The complainant can finish this at the lobby kiosk (<a href="#kiosk" target="_blank">open kiosk</a>) or on the online portal. You can still record it here.</div>'}
+        ${a.incidents.map(i => `<div class="hint"><b>${esc(i.label)}: ask the complainant</b><br>${i.ask.map(esc).join('<br>')}<br><b>Police do first</b><br>${i.first.map(esc).join('<br>')}</div>`).join('') || '<div class="hint">No specific incident type detected. Take a full statement.</div>'}
+        ${a.laws.map(l => `<div class="hint"><b>${esc(l.source)} · ${esc(l.ref)}</b><br>${esc(l.text.slice(0, 180))}…</div>`).join('')}`;
+    } catch (x) { $('wanout').textContent = x.message; }
+  };
+  // signature pad
+  const cv = $('wsig'), cx = cv.getContext('2d'); let drawing = false, inked = false; cx.lineWidth = 3; cx.lineCap = 'round'; cx.strokeStyle = '#102a8a';
+  const pt = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * cv.width / r.width, (e.clientY - r.top) * cv.height / r.height]; };
+  cv.onpointerdown = e => { drawing = true; cv.setPointerCapture(e.pointerId); const [x, y] = pt(e); cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x + .1, y + .1); cx.stroke(); inked = true; };
+  cv.onpointermove = e => { if (!drawing) return; const [x, y] = pt(e); cx.lineTo(x, y); cx.stroke(); };
+  cv.onpointerup = () => { drawing = false; };
+  $('wclr').onclick = () => { cx.clearRect(0, 0, cv.width, cv.height); inked = false; };
+  $('wsub').onclick = async () => {
+    const m = $('wmsg'); m.hidden = true; $('wsub').disabled = true;
+    try {
+      const r = await api('/api/police/walkin', 'POST', { name: $('wn').value, phone: $('wp').value, id_type: $('wit').value, id_no: $('win').value, id_seen: $('wseen').checked, category: $('wc').value, district: $('wdist').value, occurred_at: $('wo').value, place: $('wpl').value, lat, lng, description: $('wd').value, suspect: $('wsus').value, audio, signature: inked ? cv.toDataURL('image/png') : null });
+      walkinSlip(r);
+    } catch (x) { m.textContent = x.message; m.hidden = false; $('wsub').disabled = false; m.scrollIntoView({ block: 'center' }); }
+  };
+}
+let caseFilter = {};
+async function pCases() {
+  const body = document.getElementById('pbody');
+  if (!document.getElementById('flt')) {
+    body.innerHTML = `<div class="filters" id="flt"><input id="fq" placeholder="Search ref, text, place" value="${esc(caseFilter.q || '')}">
+      <select id="fs"><option value="">All statuses</option>${META.statuses.map(x => `<option ${caseFilter.status === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+      <select id="fp"><option value="">All priorities</option><option>urgent</option><option>high</option><option>normal</option></select>
+      <select id="fd"><option value="">All districts</option>${META.districts.map(x => `<option>${esc(x)}</option>`).join('')}</select>
+      <select id="fc"><option value="">All crime types</option>${META.categories.map(x => `<option>${esc(x)}</option>`).join('')}</select>
+      <select id="fm"><option value="">All cases</option><option value="1">Assigned to me</option><option value="s">My station</option><option value="w">Walk-ins (Occurrence Book)</option></select></div><div id="clist"></div>`;
+    document.getElementById('flt').oninput = () => { caseFilter = { q: fq.value, status: fs.value, priority: fp.value, district: fd.value, category: fc.value, mine: fm.value }; fetchCases(); };
+  }
+  fetchCases();
+}
+async function fetchCases() {
+  const qs = new URLSearchParams(Object.fromEntries(Object.entries(caseFilter).filter(([, v]) => v))).toString();
+  const { reports } = await api('/api/police/reports?' + qs), el = document.getElementById('clist'); if (!el) return;
+  el.innerHTML = reports.length ? reports.map(r => `<div class="card case" data-open="${esc(r.ref)}"><div class="case-head"><b>${esc(r.ref)} ${badge(r.priority)}</b><span class="badge s-${esc(r.status.split(' ')[0])}">${esc(r.status)}</span></div>
+    <div class="meta">${esc(r.category)} · ${esc(r.district)}${r.place ? ', ' + esc(r.place) : ''} · ${fmt(r.occurred_at)}${r.station_name ? ' · 🏢 ' + esc(r.station_name) : ' · 🏢 unassigned'}${r.ob_number ? ' · 📒 ' + esc(r.ob_number) : ''}${r.assigned_name ? ' · 👮 ' + esc(r.assigned_name) : ''}${r.duplicate_of ? ' · ⚠ possible duplicate of ' + esc(r.duplicate_of) : ''}</div>
+    <div>${esc(r.description.slice(0, 160))}${r.description.length > 160 ? '…' : ''}</div></div>`).join('') : '<div class="hint">No reports match.</div>';
+}
+document.addEventListener('click', e => { const c = e.target.closest('[data-open]'); if (c) openCase(c.dataset.open); });
+async function openCase(ref) {
+  modalRef = ref;
+  const [d, off] = await Promise.all([api('/api/police/reports/' + encodeURIComponent(ref)), api('/api/police/officers')]);
+  const r = d.report; let m = document.getElementById('modal'); if (!m) { m = document.createElement('div'); m.id = 'modal'; m.className = 'modal'; document.body.appendChild(m); }
+  m.innerHTML = `<div class="sheet"><div class="case-head"><h2 style="margin:0">${esc(r.ref)} ${badge(r.priority)}</h2><button class="btn sm" id="cx">Close</button></div>
+   <div class="hint">${esc(r.category)} · ${esc(r.district)}${r.place ? ', ' + esc(r.place) : ''} · happened ${fmt(r.occurred_at)} · filed ${fmt(r.created_at)}${r.lat != null ? ` · GPS ${r.lat}, ${r.lng}` : ''}</div>
+   ${r.duplicate_of ? `<div class="warn">⚠ Similar report ${esc(r.duplicate_of)} (same crime, district and place in the last 2 days). Consider linking or merging.</div>` : ''}
+   <p style="margin:12px 0">${esc(r.description)}</p>
+   <div class="hint">🏢 Station: <b>${esc(r.station_name || 'not assigned')}</b></div>
+   ${r.source === 'walk_in' ? `<div class="ok">📒 Walk-in report · <b>${esc(r.ob_number || '')}</b> · ID: ${esc(r.complainant_id || 'none')}</div>${r.signature_data ? `<div class="hint">Complainant signature / thumbprint (${fmt(r.signed_at)})</div><img alt="signature" src="${esc(r.signature_data)}" style="background:#fff;max-width:240px;border-radius:8px">` : ''}` : ''}
+   ${r.audio_transcript ? `<div class="card"><b>🎙 Voice message (transcript)</b><div class="hint">${esc(r.audio_transcript)}</div></div>` : ''}
+   ${r.suspect_details ? `<div class="card"><b>Suspect details</b><div class="hint">${esc(r.suspect_details)}</div></div>` : ''}
+   ${r.live_lat != null ? `<div class="warn">📍 LIVE location: <a href="https://www.openstreetmap.org/?mlat=${+r.live_lat}&mlon=${+r.live_lng}#map=17/${+r.live_lat}/${+r.live_lng}" target="_blank" rel="noopener">${(+r.live_lat).toFixed(5)}, ${(+r.live_lng).toFixed(5)}</a> · updated ${fmt(r.live_at)} UTC</div>` : (r.live_share ? '<div class="hint">Live location enabled; waiting for first position.</div>' : '')}
+   ${r.rag ? `<div class="card"><b>⚖ Law check (RAG)</b>${r.rag.emergency ? ' <span class="badge">EMERGENCY</span>' : ''}
+     ${r.rag.summary ? `<div class="hint">${esc(r.rag.summary)}</div>` : ''}
+     ${(r.rag.laws || []).map(l => `<div class="hint"><b>${esc(l.source)} · ${esc(l.ref)}</b>: ${esc(l.text)}</div>`).join('')}
+     ${(r.rag.incidents || []).map(i => `<div class="hint"><b>${esc(i.label)}: do first</b><br>${i.first.map(esc).join('<br>')}<br><i>Ask reporter:</i> ${i.ask.map(esc).join(' · ')}</div>`).join('')}</div>` : ''}
+   <div class="card"><b>Reporter:</b> ${r.anonymous ? 'Anonymous (message via tracking thread)' : `${esc(r.reporter_name || '')} · ${esc(r.reporter_phone || '')}`}</div>
+   ${d.evidence.length ? `<h3>Evidence</h3><div class="evi">${d.evidence.map(x => x.mime.startsWith('audio') ? `<audio src="/api/evidence/${x.id}" controls style="width:100%"></audio>` : x.mime.startsWith('video') ? `<video src="/api/evidence/${x.id}" controls></video>` : `<a href="/api/evidence/${x.id}" target="_blank" rel="noopener"><img src="/api/evidence/${x.id}" alt="Evidence"></a>`).join('')}</div>` : ''}
+   <h3>Manage case</h3><div class="row"><div><label>Status</label><select id="cs">${META.statuses.map(x => `<option ${r.status === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+   <div><label>Priority</label><select id="cp2">${['normal', 'high', 'urgent'].map(x => `<option ${r.priority === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+   <div><label>Assigned officer</label><select id="ca"><option value="">Unassigned</option>${off.officers.map(o => `<option value="${o.id}" ${r.assigned_to === o.id ? 'selected' : ''} ${ME.role === 'officer' && o.full_name !== ME.full_name ? 'disabled' : ''}>${esc(o.full_name)}</option>`).join('')}</select></div></div>
+   <button class="btn primary sm" id="csave" style="margin-top:12px">Save changes</button> <span id="cmsg" class="hint"></span>
+   <h3>Messages with reporter (visible to citizen)</h3><div class="msgs">${d.messages.map(x => `<div class="msg ${x.sender === 'police' ? 'me' : ''}">${esc(x.body)}<small>${x.sender === 'police' ? 'Police' : 'Citizen'} · ${fmt(x.created_at)}</small></div>`).join('') || '<div class="hint">No messages.</div>'}</div>
+   <form id="pm" class="row"><input id="pmb" maxlength="1500" placeholder="Ask the reporter a question"><button class="btn sm primary" style="flex:none">Send</button></form>
+   <h3>Internal notes (police only)</h3><div class="msgs">${d.notes.map(x => `<div class="msg">${esc(x.body)}<small>${esc(x.full_name)} · ${fmt(x.created_at)}</small></div>`).join('') || '<div class="hint">No notes.</div>'}</div>
+   <form id="nf" class="row"><input id="nb" maxlength="3000" placeholder="Add internal note"><button class="btn sm" style="flex:none">Add</button></form>
+   <h3>History</h3>${d.history.map(h => `<div class="hint">${fmt(h.created_at)} · ${esc(h.status)}${h.full_name ? ' · ' + esc(h.full_name) : ''}</div>`).join('')}</div>`;
+  const $ = id => document.getElementById(id);
+  $('cx').onclick = () => { m.remove(); if (policeTab === 'cases') fetchCases(); };
+  $('csave').onclick = async () => { try { await api('/api/police/reports/' + encodeURIComponent(ref), 'PATCH', { status: $('cs').value, priority: $('cp2').value, assigned_to: $('ca').value ? +$('ca').value : null }); openCase(ref); } catch (x) { $('cmsg').textContent = x.message; } };
+  $('pm').onsubmit = async e => { e.preventDefault(); if (!$('pmb').value.trim()) return; await api(`/api/police/reports/${encodeURIComponent(ref)}/message`, 'POST', { body: $('pmb').value }); openCase(ref); };
+  $('nf').onsubmit = async e => { e.preventDefault(); if (!$('nb').value.trim()) return; await api(`/api/police/reports/${encodeURIComponent(ref)}/note`, 'POST', { body: $('nb').value }); openCase(ref); };
+}
+async function pUsers() {
+  const body = document.getElementById('pbody'), { users } = await api('/api/admin/users');
+  body.innerHTML = `<div class="card" style="overflow:auto"><table><tr><th>Officer</th><th>National ID</th><th>Role</th><th>Status</th><th></th></tr>${users.map(u => `<tr><td>${esc(u.full_name)}<div class="hint">${esc(u.station)}</div></td><td>${esc(u.nin)}</td><td>${esc(u.role)}</td><td>${u.locked ? '<span class="bad-t">Locked</span>' : '<span class="ok-t">Active</span>'}</td><td style="white-space:nowrap">${u.username === ME.username ? '' : `${u.locked ? `<button class="btn sm" data-ul="${u.id}">Unlock</button> ` : ''}<button class="btn sm" data-tog="${u.id}" data-on="${u.active}">${u.active ? 'Disable' : 'Enable'}</button>`}</td></tr>`).join('')}</table></div>
+  <div class="card"><b>Add officer</b><div class="hint">The officer signs in with their National ID number and this temporary password.</div><form id="uf"><div class="row"><div><label>Full name</label><input id="un" required></div><div><label>National ID number</label><input id="un2" maxlength="14" placeholder="CM…………" autocapitalize="characters" required></div></div>
+  <div class="row"><div><label>Username</label><input id="uu" required></div><div><label>Temporary password (8+)</label><input id="up" type="password" required></div></div>
+  <div class="row"><div><label>Role</label><select id="ur"><option>officer</option><option>commander</option><option>admin</option></select></div><div><label>Station</label><input id="us"></div></div>
+  <div id="uerr"></div><button class="btn sm primary" style="margin-top:12px">Create user</button></form></div>`;
+  body.onclick = async e => {
+    const t = e.target.closest('[data-tog]'), r = e.target.closest('[data-rf]'), ul = e.target.closest('[data-ul]');
+    if (ul) { await api('/api/admin/users/' + ul.dataset.ul, 'PATCH', { unlock: true }); pUsers(); }
+    if (t) { await api('/api/admin/users/' + t.dataset.tog, 'PATCH', { active: t.dataset.on !== '1' }); pUsers(); }
+    if (r && confirm('Reset this officer\'s Face ID? They must enrol again on next sign-in.')) { await api('/api/admin/users/' + r.dataset.rf, 'PATCH', { reset_face: true }); pUsers(); }
+  };
+  document.getElementById('uf').onsubmit = async e => { e.preventDefault(); try { await api('/api/admin/users', 'POST', { full_name: un.value, nin: un2.value, username: uu.value, password: up.value, role: ur.value, station: us.value }); pUsers(); } catch (x) { document.getElementById('uerr').innerHTML = err(x.message); } };
+}
+const REASONS = { ok: 'Signed in', enrolled: 'Signed in (Face ID enrolled)', bad_nin_or_password: 'Wrong NIN/password', face_mismatch: 'Face did not match', id_mismatch: 'Different ID card', cross_mismatch: 'Face ≠ ID photo', duplicate_face: 'Face enrolled for another officer', no_location: 'No location', no_face: 'No face read' };
+async function pLogins() {
+  const body = document.getElementById('pbody'), { logins } = await api('/api/admin/logins');
+  const f = v => v == null ? '–' : (+v).toFixed(2);
+  body.innerHTML = `<div class="hint" style="margin-bottom:8px">Last 300 sign-in attempts. Face distance: lower is closer (match limit about 0.50). Times are your local time.</div><div class="card" style="overflow:auto"><table><tr><th>Time</th><th>Officer</th><th>Result</th><th>Location</th><th>Live / ID / Cross</th><th>Turn</th><th>Selfie</th></tr>${logins.map(l => `<tr><td>${fmt(l.created_at)}</td><td>${esc(l.full_name || '?')}<div class="hint">${esc(l.nin)}</div></td><td class="${l.success ? 'ok-t' : 'bad-t'}">${esc(REASONS[l.reason] || l.reason)}</td>
+    <td>${l.lat != null ? `<a style="color:var(--accent)" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=${+l.lat}&mlon=${+l.lng}#map=15/${+l.lat}/${+l.lng}">${(+l.lat).toFixed(4)}, ${(+l.lng).toFixed(4)}</a>${l.accuracy_m != null ? `<div class="hint">±${Math.round(l.accuracy_m)} m</div>` : ''}${l.outside_ug ? '<div class="bad-t">outside Uganda</div>' : ''}` : '<span class="hint">none</span>'}</td>
+    <td>${f(l.dist_live)} / ${f(l.dist_id)} / ${f(l.dist_cross)}</td><td>${l.liveness ? '✓' : '–'}</td><td>${l.has_photo ? `<a href="/api/admin/loginphoto/${l.id}" target="_blank" rel="noopener"><img class="th" loading="lazy" alt="Selfie at sign-in" src="/api/admin/loginphoto/${l.id}"></a>` : ''}</td></tr>`).join('')}</table></div>`;
+}
+async function pAudit() {
+  const { log } = await api('/api/admin/audit');
+  document.getElementById('pbody').innerHTML = `<div class="card"><table><tr><th>Time (UTC)</th><th>User</th><th>Action</th><th>Detail</th></tr>${log.map(l => `<tr><td>${fmt(l.created_at)}</td><td>${esc(l.username || '-')}</td><td>${esc(l.action)}</td><td>${esc(l.detail)}</td></tr>`).join('')}</table></div>`;
+}
+
+/* ---------------- boot ---------------- */
+(async () => { try { META = await api('/api/meta'); } catch {} route(); })();
+</script>
+</body>
+</html>
