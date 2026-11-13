@@ -1,7 +1,7 @@
 {
   "name": "safereport-ug",
-  "version": "2.0.0",
-  "description": "Uganda Police e-Crime reporting with RAG law check, voice reports, live location and demo SMS",
+  "version": "2.7.0",
+  "description": "Uganda Police e-Crime reporting with white-and-blue theme, service-area routing, public UPF news, RAG law check, voice reports and demo SMS",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

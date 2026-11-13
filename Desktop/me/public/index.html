@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#1f3a93">
 <title>SafeReport UG</title>
 <link rel="icon" href="/logo.png">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233ecf9f'/%3E%3Cpath d='M16 6l8 3v6c0 5-3.5 8.5-8 11-4.5-2.500-8-6-8-11V9z' fill='%2304231a'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231f3a93'/%3E%3Cpath d='M16 6l8 3v6c0 5-3.5 8.5-8 11-4.5-2.500-8-6-8-11V9z' fill='%23ffffff'/%3E%3C/svg%3E">
 <style>
 :root{--bg:#f2f5fb;--panel:#ffffff;--panel2:#e9eff9;--line:#c9d5ea;--text:#0e1a3f;--mute:#4f5f88;--accent:#1f3a93;--accent-ink:#ffffff;--red:#c62828;--amber:#9a5b00;--blue:#1a56d6;--radius:14px}
 *{box-sizing:border-box;margin:0}
@@ -137,10 +137,37 @@ body.pol a.chip{color:var(--text)}
 .pmap:active{cursor:grabbing}.pmap{height:420px}
 .pmap .mbtn{position:absolute;right:8px;width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:#fff;color:#1f3a93;font:700 20px/1 system-ui;cursor:pointer;box-shadow:0 1px 3px #0003}
 .pmap .tip{position:absolute;left:8px;bottom:8px;right:8px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;color:var(--text);box-shadow:0 2px 8px #0003}
+/* Brand theme is global: public reports, tracking, station tools and police dashboard. */
+body.app-theme{--bg:#f4f7ff;--panel:#fff;--panel2:#eaf0fc;--line:#c8d6ee;--text:#132447;--mute:#536687;--accent:#1f3a93;--accent-ink:#fff;--blue:#2864c5;color-scheme:light;background:var(--bg);color:var(--text)}
+body.app-theme header.top,body.app-theme.pol header.top{max-width:none;background:#1f3a93;color:#fff;border-bottom:3px solid #d8e5fb}
+body.app-theme .brand b,body.app-theme.pol .brand b{color:#fff}
+body.app-theme .tag,body.app-theme.pol .tag{color:#e7efff;border-color:#ffffff70}
+body.app-theme .gov{background:#1f3a93;color:#fff;border-bottom:1px solid #ffffff30}
+body.app-theme .offbar{background:linear-gradient(90deg,#17377f,#2864c5);color:#fff;border-bottom:2px solid #b7c9ee}
+body.app-theme .offbar small{color:#e4edff}
+body.app-theme .btn.primary small,body.app-theme.pol .btn.primary small{color:#e4edff}
+body.app-theme .btn:not(.primary):not(.danger){background:#fff;border-color:#b9c9e4;color:#17377f}
+body.app-theme .btn:not(.primary):not(.danger) small{color:#536687}
+body.app-theme .ok,body.app-theme.pol .ok{background:#eaf2ff;border-color:#bed0f0;color:#17377f}
+body.app-theme .ok-t,body.app-theme.pol .ok-t{color:#1f3a93;background:transparent;border-color:transparent}
+body.app-theme .msg.me,body.app-theme.pol .msg.me{background:#dce8fc;color:#132447}
+body.app-theme .msg.me small{color:#536687}
+body.app-theme .err,body.app-theme.pol .err{background:#fff0f0;border-color:#e7b3b3;color:#8b2020}
+body.app-theme .sos,body.app-theme.pol .sos{background:#fff1f1;border-color:#e9b2b2;color:#8b2020}
+body.app-theme .sos b,body.app-theme.pol .sos b{color:#a31f2b}
+body.app-theme .warn,body.app-theme .caution,body.app-theme.pol .warn,body.app-theme.pol .caution{background:#edf3ff;border-color:#bfd0ee;color:#243d6b}
+body.app-theme .info,body.app-theme.pol .info,body.app-theme .pill,body.app-theme.pol .pill{background:#e5eeff;border-color:#bfd0ee;color:#17377f}
+body.app-theme .notice-pop{border-left-color:#1f3a93}
+body.app-theme .pinbox{color:#1f3a93}
+body.app-theme .slip-h{border-color:#1f3a93;color:#1f3a93}
+body.app-theme nav.tabs{background:#fffffffa;border-top:1px solid #c8d6ee}
+body.app-theme nav.tabs a.on{color:#1f3a93;font-weight:700}
+body.app-theme input,body.app-theme select,body.app-theme textarea{background:#fff;color:#132447;border-color:#c8d6ee}
+body.app-theme .card,body.app-theme .tile{box-shadow:0 1px 4px #1f3a9310}
 </style>
 </head>
-<body>
-<header class="top"><div class="brand"><img class="logo" src="/logo.png" alt="Uganda Police crest">SafeReport <b>UG</b></div><span class="tag">Uganda Police e-Crime Reporting</span></header>
+<body class="app-theme">
+<header class="top"><div class="brand"><img class="logo" src="/logo.png" alt="Uganda Police crest">SafeReport <b>UG</b></div><span class="tag">Uganda Police e-Crime · v2.7</span></header>
 <main id="app"></main>
 <nav class="tabs" id="tabs">
   <a href="#home" data-t="home"><span class="i">⌂</span>Home</a>
@@ -152,7 +179,7 @@ body.pol a.chip{color:var(--text)}
 <script src="/vendor/qrcode.js"></script>
 <script src="/pmap.js"></script>
 <script>
-if (!/^https?:$/.test(location.protocol)) { document.body.innerHTML = '<div style="font:16px system-ui;padding:24px;max-width:480px;margin:auto;color:#e8f2ef;background:#0b1412;min-height:100vh"><h2>Server not running</h2><p>This page was opened as a file, so it cannot reach the database. Start the server first, then open <b>http://localhost:3000</b> in the browser.</p><p style="color:#8fa8a2">Steps: <code>npm install</code>, then <code>node server.js</code>. See README.</p></div>'; throw new Error('Open through the server (http://localhost:3000), not as a file.'); }
+if (!/^https?:$/.test(location.protocol)) { document.body.innerHTML = '<div style="font:16px system-ui;padding:24px;max-width:480px;margin:auto;color:#132447;background:#f4f7ff;min-height:100vh"><h2>Server not running</h2><p>This page was opened as a file, so it cannot reach the database. Start the server first, then open <b>http://localhost:3000</b> in the browser.</p><p style="color:#536687">Steps: <code>npm install</code>, then <code>node server.js</code>. See README.</p></div>'; throw new Error('Open through the server (http://localhost:3000), not as a file.'); }
 
 'use strict';
 const $app = document.getElementById('app');

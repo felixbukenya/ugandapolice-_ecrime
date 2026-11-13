@@ -60,7 +60,7 @@ Demo police accounts (**change before real use**). Sign in with the registered n
 The badges and credentials are placeholders. Register real officers in **Police > Station officers** with their badge, name, NIN and an individual strong PIN/password.
 
 ## What changed in this version
-- **Application interface is white and blue** (Uganda Police colours, gold trim).
+- **Application interface uses a consistent white-and-blue theme** across public reporting, tracking, police tools, header/navigation, notices and the demo inbox. The visible build label is v2.7.
 - **Statistics are readable** (the bar charts had a duplicate CSS rule).
 - **Hotspot map is navigable**: drag to move, scroll/pinch/double-click or +/- to zoom, tap a dot to see the case and open it. Street tiles need internet; dots show without it (`public/pmap.js`).
 - **New role: CID** (Criminal Investigations). Add it under Police > Users. Old databases are upgraded automatically.
