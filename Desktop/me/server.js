@@ -1,0 +1,839 @@
+// SafeReport UG - e-Crime reporting system (backend)
+// Database: MySQL/MariaDB from XAMPP (default) or SQLite. See config.js and db.js.
+// Run:  npm install   (once)   then   node server.js     then open http://localhost:3000
+'use strict';
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const config = require('./config');
+const openDb = require('./db');
+const rag = require('./rag');
+
+const PORT = config.port;
+const ROOT = __dirname;
+const DATA = path.join(ROOT, 'data');
+const UPLOADS = path.join(DATA, 'uploads');
+fs.mkdirSync(UPLOADS, { recursive: true });
+
+// ---------- database (opened in start() at the bottom) ----------
+let db;
+
+// ---------- constants ----------
+const DISTRICTS = ['Kampala','Wakiso','Mukono','Entebbe','Jinja','Mbarara','Gulu','Lira','Mbale','Masaka','Fort Portal','Arua','Kabale','Soroti','Hoima','Kasese','Tororo','Iganga','Busia','Luwero','Mityana','Mpigi','Kayunga','Buikwe','Kamuli','Masindi','Moroto','Kitgum','Adjumani','Kotido'];
+const CATEGORIES = ['Theft','Motorcycle (boda) or vehicle theft','Cattle theft','Burglary or break-in','Robbery','Armed robbery (gun or panga)','Assault','Murder or killing','Mob justice','Kidnapping or abduction','Terrorism','Threats or harassment','Extortion or blackmail','Arson or fire outbreak','Vandalism','Domestic violence','Sexual violence','Defilement or child abuse','Human trafficking','Missing person','Fraud or scam','Mobile money fraud','Cybercrime','Forgery or counterfeit','Drug-related','Illegal firearms','Corruption','Land dispute','Public disorder or riot','Traffic or road crime','Other'];
+const STATUSES = ['Received','Under review','Assigned to officer','Resolved','Rejected'];
+const URGENT_WORDS = ['gun','weapon','knife','kidnap','abduct','rape','kill','murder','shot','stab','bomb','hostage','child','defile','bleeding','armed','threaten','terrorist','terrorism','explosive'];
+const HIGH_WORDS = ['robbery','assault','beaten','violence','stolen','motorcycle','boda','car','blackmail','hack','fraud','scam','threat'];
+
+// ---------- helpers ----------
+const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');          // UTC 'YYYY-MM-DD HH:MM:SS'
+const ago = sec => new Date(Date.now() - sec * 1000).toISOString().slice(0, 19).replace('T', ' ');
+function hashPw(pw, salt = crypto.randomBytes(16).toString('hex')) {
+  return salt + ':' + crypto.scryptSync(pw, salt, 32).toString('hex');
+}
+function checkPw(pw, stored) {
+  const [salt, h] = stored.split(':');
+  const a = Buffer.from(h, 'hex'), b = crypto.scryptSync(pw, salt, 32);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+const clean = (s, max = 2000) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
+function triage(text, category) {
+  const t = (text + ' ' + category).toLowerCase();
+  if (URGENT_WORDS.some(w => t.includes(w)) || ['Sexual violence', 'Defilement or child abuse', 'Child abuse', 'Murder or killing', 'Mob justice', 'Kidnapping or abduction', 'Arson or fire outbreak', 'Armed robbery (gun or panga)', 'Human trafficking'].includes(category)) return 'urgent';
+  if (HIGH_WORDS.some(w => t.includes(w)) || ['Robbery', 'Assault', 'Domestic violence', 'Burglary or break-in', 'Illegal firearms', 'Threats or harassment', 'Extortion or blackmail'].includes(category)) return 'high';
+  return 'normal';
+}
+async function newRef() {
+  for (let i = 0; i < 60; i++) {
+    const digits = i < 40 ? 4 : 6;
+    const ref = 'UG-' + String(crypto.randomInt(0, 10 ** digits)).padStart(digits, '0');
+    if (!(await db.get('SELECT 1 AS x FROM reports WHERE ref=?', ref))) return ref;
+  }
+  throw new Error('ref generation failed');
+}
+async function audit(userId, action, detail) {
+  await db.run('INSERT INTO audit_log(user_id,action,detail) VALUES(?,?,?)', userId ?? null, action, detail ?? null);
+}
+
+// simple in-memory rate limiter
+const hits = new Map();
+function limited(ip, key, max, windowMs) {
+  const k = key + ip, t = Date.now();
+  const arr = (hits.get(k) || []).filter(x => t - x < windowMs);
+  arr.push(t); hits.set(k, arr);
+  return arr.length > max;
+}
+
+// A crime report needs text OR a voice recording (at least one). With audio only, the speech-to-text (if any) becomes the description.
+const VOICE_ONLY = '[Voice report: listen to the recording attached to this case.]';
+function needTextOrAudio(description, transcript, audio, msg) {
+  if (description.length >= 10) return description;
+  if (!audio) throw { code: 400, msg };
+  return (transcript && transcript.length >= 3) ? transcript : VOICE_ONLY;
+}
+
+// ---------- seed ----------
+async function seed() {
+  if ((await db.get('SELECT COUNT(*) AS c FROM users')).c) return;
+  const add = (u, n, r, st, pw, nin) => db.run('INSERT INTO users(username,full_name,role,station,password_hash,nin) VALUES(?,?,?,?,?,?)', u, n, r, st, hashPw(pw), nin);
+  await add('admin', 'System Administrator', 'admin', 'Police HQ, Naguru', 'Admin@123', 'CM00000000AD01');
+  await add('commander', 'Cmdr. Nakato Sarah', 'commander', 'Kampala Central', 'Commander@123', 'CM00000000CM01');
+  const o1 = (await add('officer1', 'Det. Okello James', 'officer', 'Kampala Central', 'Officer@123', 'CM00000000OF01')).insertId;
+  await add('officer2', 'Det. Namutebi Grace', 'officer', 'Mukono Central', 'Officer@123', 'CM00000000OF02');
+  const samples = [
+    ['Theft', 'A man in a black hoody snatched my phone', 'Mukono', 'UCU', 0.3533, 32.7553, 2, 'Received'],
+    ['Theft', 'A man in all black snatched a lady\'s purse', 'Kampala', 'Mapera house', 0.3136, 32.5811, 2, 'Received'],
+    ['Theft', 'Motorcycle stolen outside the market around midday.', 'Kampala', 'Nakawa market', 0.3317, 32.6145, 6, 'Under review'],
+    ['Mobile money fraud', 'Fake mobile money agent asked for my PIN and took my money.', 'Wakiso', 'Entebbe Road', 0.2, 32.5, 5, 'Received'],
+    ['Vandalism', 'Street lights broken near the school gate.', 'Mukono', 'Kakoba', 0.35, 32.75, 9, 'Resolved'],
+    ['Robbery', 'Armed men robbed a shop at night, one had a gun.', 'Jinja', 'Main Street', 0.4244, 33.2041, 1, 'Assigned to officer'],
+    ['Cybercrime', 'Someone hacked my Facebook and is blackmailing me.', 'Kampala', 'Online', 0.3476, 32.5825, 3, 'Under review'],
+    ['Assault', 'Beaten by a group outside a bar.', 'Gulu', 'Laroo', 2.7746, 32.2990, 4, 'Received'],
+  ];
+  for (const s of samples) {
+    const d = new Date(Date.now() - s[6] * 86400000).toISOString().slice(0, 16).replace('T', ' ');
+    const ref = await newRef();
+    const assigned = ['Assigned to officer', 'Under review'].includes(s[7]) ? o1 : null;
+    const r = await db.run(`INSERT INTO reports(ref,pin_hash,category,description,district,place,lat,lng,occurred_at,anonymous,priority,status,assigned_to,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)`, ref, hashPw('000000'), s[0], s[1], s[2], s[3], s[4], s[5], d, triage(s[1], s[0]), s[7], assigned, d + ':00', d + ':00');
+    await db.run('INSERT INTO status_history(report_id,status,created_at) VALUES(?,?,?)', r.insertId, 'Received', d + ':00');
+    if (s[7] !== 'Received') await db.run('INSERT INTO status_history(report_id,status,user_id,created_at) VALUES(?,?,?,?)', r.insertId, s[7], o1, d + ':00');
+  }
+  console.log('Seeded demo users. See README for their name, badge and password combinations; replace them before operational use.');
+}
+
+// ---------- upgrade older databases (adds voice, live location, suspect, SMS) ----------
+async function migrate() {
+  const cols = { audio_transcript: 'TEXT', suspect_details: 'TEXT', rag_json: 'TEXT', live_lat: 'REAL', live_lng: 'REAL', live_at: 'VARCHAR(19)', live_share: 'INTEGER DEFAULT 0', area: 'VARCHAR(100)' };
+  for (const [c, t] of Object.entries(cols)) {
+    try { await db.run(`ALTER TABLE reports ADD COLUMN ${c} ${t}`); } catch (e) { if (!/duplicate/i.test(String(e.message))) throw e; }
+  }
+  for (const [c, t] of Object.entries({ station_id: 'INTEGER', station_at: 'VARCHAR(19)' })) {
+    try { await db.run(`ALTER TABLE reports ADD COLUMN ${c} ${t}`); } catch (e) { if (!/duplicate/i.test(String(e.message))) throw e; }
+  }
+  for (const [c, t] of Object.entries({ source: "VARCHAR(12) DEFAULT 'online'", ob_number: 'VARCHAR(40)', complainant_id: 'VARCHAR(50)', intake_by: 'INTEGER', signature_data: 'TEXT', signed_at: 'VARCHAR(19)' })) {
+    try { await db.run(`ALTER TABLE reports ADD COLUMN ${c} ${t}`); } catch (e) { if (!/duplicate/i.test(String(e.message))) throw e; }
+  }
+  const my = db.kind === 'mysql';
+  if (my) { try { await db.run("ALTER TABLE users MODIFY role ENUM('officer','cid','commander','admin') NOT NULL"); } catch (e) { console.error('role enum:', e.message); } }
+  await db.run(`CREATE TABLE IF NOT EXISTS stations (id ${my ? 'INT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, name VARCHAR(100) NOT NULL, area VARCHAR(100), district VARCHAR(60), lat REAL, lng REAL, radius_km REAL DEFAULT 5, phone VARCHAR(30), active INTEGER DEFAULT 1, created_by INTEGER, created_at VARCHAR(19) NOT NULL)`);
+  try { await db.run('ALTER TABLE stations ADD COLUMN area VARCHAR(100)'); } catch (e) { if (!/duplicate/i.test(String(e.message))) throw e; }
+  if (!(await db.get('SELECT id FROM stations LIMIT 1'))) for (const [n, a, d, la, ln] of [['Kampala Central', 'Central Division', 'Kampala', 0.3136, 32.5811], ['Entebbe', 'Entebbe Municipality', 'Wakiso', 0.0512, 32.4637], ['Jinja', 'Jinja Central', 'Jinja', 0.4244, 33.2041], ['Mukono Central', 'Mukono Municipality', 'Mukono', 0.3533, 32.7553]]) await db.run('INSERT INTO stations(name,area,district,lat,lng,radius_km,created_at) VALUES(?,?,?,?,?,?,?)', n, a, d, la, ln, 8, now());
+  await db.run(`CREATE TABLE IF NOT EXISTS sms_outbox (id ${my ? 'INT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, report_id INTEGER, to_phone VARCHAR(20) NOT NULL, body TEXT NOT NULL, created_at VARCHAR(19) NOT NULL)`);
+  await db.run(`CREATE TABLE IF NOT EXISTS case_assignments (id ${my ? 'INT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, report_id INTEGER NOT NULL, user_id INTEGER NOT NULL, assigned_by INTEGER, assigned_at VARCHAR(19) NOT NULL)`);
+  await db.run(`CREATE TABLE IF NOT EXISTS news_updates (id ${my ? 'INT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, title VARCHAR(180) NOT NULL, category VARCHAR(60) NOT NULL DEFAULT 'Community update', summary TEXT NOT NULL, url VARCHAR(500), active INTEGER NOT NULL DEFAULT 1, created_by INTEGER, created_at VARCHAR(19) NOT NULL)`);
+}
+const km = (a, b, c, d) => { const r = x => x * Math.PI / 180, h = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
+const areaKey = s => String(s || '').toLowerCase().replace(/\b(district|division|municipality|county|subcounty)\b/g,'').replace(/[^a-z0-9]/g,'');
+// Case routing follows the station's declared local area and district, never a distance radius.
+async function pickStation(_lat, _lng, district, area = '') {
+  const all = await db.all('SELECT * FROM stations WHERE active=1');
+  const sameDistrict = all.filter(s => areaKey(s.district) && areaKey(s.district) === areaKey(district));
+  if (!sameDistrict.length) return null;
+  const exactArea = areaKey(area) ? sameDistrict.find(s => areaKey(s.area) === areaKey(area)) : null;
+  if (exactArea) return { st: exactArea, how: 'area' };
+  const general = sameDistrict.find(s => !areaKey(s.area));
+  return general ? { st: general, how: 'district' } : (sameDistrict.length === 1 ? { st: sameDistrict[0], how: 'district' } : null);
+}
+async function hasWorkedOnCase(userId, reportId) {
+  return !!(await db.get('SELECT 1 AS x FROM case_assignments WHERE report_id=? AND user_id=? LIMIT 1',reportId,userId)
+    || await db.get('SELECT 1 AS x FROM status_history WHERE report_id=? AND user_id=? LIMIT 1',reportId,userId)
+    || await db.get('SELECT 1 AS x FROM notes WHERE report_id=? AND user_id=? LIMIT 1',reportId,userId));
+}
+const phoneKey = p => String(p || '').replace(/\D/g, '').slice(-9);
+async function sms(reportId, phone, body) { if (phoneKey(phone).length === 9) await db.run('INSERT INTO sms_outbox(report_id,to_phone,body,created_at) VALUES(?,?,?,?)', reportId, phoneKey(phone), body, now()); }
+
+// Import only public article metadata from the official UPF WordPress feed.
+const UPF_NEWS_FEED = process.env.UPF_NEWS_FEED_URL || 'https://upf.go.ug/feed/';
+let upfSyncInFlight = null, upfLastSyncAt = null, upfLastSyncError = null, upfLastAttemptAt = 0;
+function xmlValue(item, tag) { const m = item.match(new RegExp('<' + tag + '(?:\\s[^>]*)?>([\\s\\S]*?)<\\/' + tag + '>', 'i')); return m ? m[1] : ''; }
+function plainFeedText(value, max = 1600) {
+  return String(value || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Math.min(0x10ffff, +n))).replace(/&#x([\da-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n,16))).replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&quot;/gi,'"').replace(/&#0*39;/g,"'").replace(/&apos;/gi,"'").replace(/\s+/g,' ').trim().slice(0,max);
+}
+function parseUpfFeed(payload, contentType) {
+  if (contentType.includes('json') || /^[\s]*\[/.test(payload)) {
+    const rows = JSON.parse(payload);
+    return (Array.isArray(rows) ? rows : rows.items || []).slice(0,15).map(x => ({ title: plainFeedText(x.title?.rendered || x.title,180), summary: plainFeedText(x.excerpt?.rendered || x.summary || x.description,1600), url: String(x.link || x.url || ''), category: 'Latest news', date: x.date })).filter(x=>x.title&&x.url);
+  }
+  const rows = [...payload.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi)].slice(0,15).map(([,item]) => ({
+    title: plainFeedText(xmlValue(item,'title'),180),
+    summary: plainFeedText(xmlValue(item,'description') || xmlValue(item,'content:encoded') || xmlValue(item,'content'),1600),
+    url: plainFeedText(xmlValue(item,'link'),500),
+    category: plainFeedText(xmlValue(item,'category'),60) || 'Latest news',
+    date: plainFeedText(xmlValue(item,'pubDate') || xmlValue(item,'dc:date'),80)
+  }));
+  return rows.filter(x=>x.title&&x.url);
+}
+async function syncUpfNews() {
+  if (upfSyncInFlight) return upfSyncInFlight;
+  upfLastAttemptAt = Date.now();
+  upfSyncInFlight = (async () => {
+    const feedUrl = new URL(UPF_NEWS_FEED);
+    const upfHosts = ['upf.go.ug','www.upf.go.ug'];
+    if (feedUrl.protocol !== 'https:' || !upfHosts.includes(feedUrl.hostname)) throw new Error('News feed must use HTTPS on the official upf.go.ug site.');
+    const response = await fetch(feedUrl, { headers: { 'Accept': 'application/rss+xml, application/atom+xml, application/json, application/xml, text/xml', 'User-Agent': 'SafeReportUG-NewsReader/1.0' }, signal: AbortSignal.timeout(10000) });
+    if (!response.ok || (response.url && !upfHosts.includes(new URL(response.url).hostname))) throw new Error(`UPF news feed returned HTTP ${response.status}.`);
+    const payload = await response.text();
+    if (payload.length > 3_000_000) throw new Error('UPF news feed is larger than expected.');
+    const items = parseUpfFeed(payload, response.headers.get('content-type') || ''); if (!items.length) throw new Error('The feed did not contain readable articles.'); let imported = 0;
+    for (const item of items) {
+      let articleUrl; try { articleUrl = new URL(item.url); } catch { continue; }
+      if (articleUrl.protocol !== 'https:' || !upfHosts.includes(articleUrl.hostname)) continue;
+      if (await db.get('SELECT id FROM news_updates WHERE url=? LIMIT 1', articleUrl.href)) continue;
+      const parsedDate = item.date ? new Date(item.date) : new Date();
+      const created = Number.isNaN(+parsedDate) ? now() : parsedDate.toISOString().slice(0,19).replace('T',' ');
+      const category = clean(`UPF · ${item.category}`,60) || 'UPF · Latest news';
+      await db.run('INSERT INTO news_updates(title,category,summary,url,created_at) VALUES(?,?,?,?,?)', clean(item.title,180), category, clean(item.summary,1600) || 'Open the official Uganda Police Force article to read the update.', articleUrl.href, created);
+      imported++;
+    }
+    upfLastSyncAt = now(); upfLastSyncError = null;
+    return { imported, checked_at: upfLastSyncAt };
+  })().catch(e => { upfLastSyncError = clean(e.message,240); throw e; }).finally(() => { upfSyncInFlight = null; });
+  return upfSyncInFlight;
+}
+function scheduleUpfNewsSync(force = false) {
+  if (!force && Date.now() - upfLastAttemptAt < 30 * 60 * 1000) return;
+  syncUpfNews().catch(e => console.warn('UPF news sync unavailable:', e.message));
+}
+
+// ---------- http plumbing ----------
+function send(res, code, body, headers = {}) {
+  const isObj = typeof body === 'object' && !Buffer.isBuffer(body);
+  res.writeHead(code, {
+    'Content-Type': isObj ? 'application/json' : 'text/plain',
+    'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', ...headers
+  });
+  res.end(isObj ? JSON.stringify(body) : body);
+}
+function readBody(req, limit = 30 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on('data', c => { size += c.length; if (size > limit) { reject(Object.assign(new Error('Too large'), { code: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on('end', () => { try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks)) : {}); } catch { reject(Object.assign(new Error('Bad JSON'), { code: 400 })); } });
+  });
+}
+function cookie(req, name) {
+  const m = (req.headers.cookie || '').split(/;\s*/).find(c => c.startsWith(name + '='));
+  return m ? decodeURIComponent(m.slice(name.length + 1)) : null;
+}
+async function authUser(req) {
+  const tok = cookie(req, 'sid'); if (!tok) return null;
+  const row = await db.get(`SELECT u.id,u.username,u.full_name,u.role,u.station FROM sessions s JOIN users u ON u.id=s.user_id
+    WHERE s.token=? AND s.expires_at>? AND u.active=1`, tok, now());
+  return row || null;
+}
+
+// ---------- API ----------
+const routes = [];
+const route = (method, pattern, opts, fn) => routes.push({ method, re: new RegExp('^' + pattern.replace(/:\w+/g, '([^/]+)') + '$'), opts, fn });
+
+route('GET', '/api/meta', {}, (ctx) => ({ districts: DISTRICTS, categories: CATEGORIES, statuses: STATUSES }));
+
+route('GET', '/api/public/stats', {}, async () => ({
+  total: (await db.get('SELECT COUNT(*) n FROM reports')).n,
+  resolved: (await db.get("SELECT COUNT(*) n FROM reports WHERE status='Resolved'")).n,
+  byCategory: await db.all('SELECT category, COUNT(*) n FROM reports GROUP BY category ORDER BY n DESC LIMIT 8'),
+}));
+route('GET', '/api/public/news', {}, async (ctx) => {
+  scheduleUpfNewsSync();
+  const after = Math.max(0, Number(ctx.query.after) || 0);
+  return { news: await db.all('SELECT id,title,category,summary,url,created_at FROM news_updates WHERE active=1 AND id>? ORDER BY id DESC LIMIT 12', after), source: { name: 'Uganda Police Force', url: 'https://upf.go.ug/', last_checked: upfLastSyncAt, syncing: !!upfSyncInFlight, error: upfLastSyncError } };
+});
+route('GET', '/api/public/stations', {}, async () => ({ stations: await db.all('SELECT id,name,area,district,lat,lng,phone FROM stations WHERE active=1 ORDER BY district,name') }));
+route('GET', '/api/location/reverse', {}, async (ctx) => {
+  if(limited(ctx.ip,'reverse_geocode',30,600000)) throw {code:429,msg:'Location lookups are temporarily limited. Try again shortly.'};
+  const lat=Number(ctx.query.lat),lng=Number(ctx.query.lng);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180) throw {code:400,msg:'A valid GPS position is required.'};
+  const map_url=`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, key=process.env.GOOGLE_MAPS_API_KEY;
+  if(!key) return {area:null,district:null,formatted_address:'',map_url,key_required:true};
+  try {
+    const u=new URL('https://maps.googleapis.com/maps/api/geocode/json');u.searchParams.set('latlng',`${lat},${lng}`);u.searchParams.set('key',key);
+    const response=await fetch(u,{signal:AbortSignal.timeout(8000)}), data=await response.json();
+    if(!response.ok||data.status!=='OK'||!data.results?.length) return {area:null,district:null,formatted_address:'',map_url,key_required:false};
+    const components=data.results[0].address_components||[], get=type=>components.find(c=>c.types.includes(type))?.long_name||'';
+    const districtCandidates=[get('administrative_area_level_2'),get('locality'),get('administrative_area_level_3')];
+    const district=districtCandidates.map(x=>DISTRICTS.find(d=>areaKey(d)===areaKey(x))).find(Boolean)||'';
+    const area=get('sublocality_level_1')||get('sublocality')||get('neighborhood')||get('administrative_area_level_3')||get('locality');
+    return {area,district,formatted_address:data.results[0].formatted_address||'',map_url,key_required:false};
+  } catch { return {area:null,district:null,formatted_address:'',map_url,key_required:false}; }
+});
+
+route('POST', '/api/reports', {}, async (ctx) => {
+  if (limited(ctx.ip, 'submit', 10, 3600000)) throw { code: 429, msg: 'Too many reports from this device. Try again later.' };
+  const b = ctx.body;
+  const category = clean(b.category, 40); let description = clean(b.description, 4000);
+  const district = clean(b.district, 40), area = clean(b.area,100), place = clean(b.place, 120);
+  if (!CATEGORIES.includes(category)) throw { code: 400, msg: 'Choose what happened.' };
+  if (!DISTRICTS.includes(district)) throw { code: 400, msg: 'Choose a district.' };
+  const occurred = clean(b.occurred_at, 20).replace('T', ' ');
+  if (!/^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(occurred)) throw { code: 400, msg: 'Enter when it happened.' };
+  if (new Date(occurred.replace(' ', 'T')) > new Date(Date.now() + 3600000)) throw { code: 400, msg: 'Date cannot be in the future.' };
+  const anonymous = b.anonymous === false ? 0 : 1;
+  const name = anonymous ? null : clean(b.name, 80), phone = anonymous ? null : clean(b.phone, 20);
+  if (!anonymous && !/^\+?\d[\d\s-]{7,16}$/.test(phone || '')) throw { code: 400, msg: 'Enter a valid phone number or choose anonymous.' };
+  const lat = Number.isFinite(+b.lat) && b.lat !== null && b.lat !== '' ? +b.lat : null;
+  const lng = Number.isFinite(+b.lng) && b.lng !== null && b.lng !== '' ? +b.lng : null;
+  if(lat===null||lng===null||Math.abs(lat)>90||Math.abs(lng)>180) throw {code:400,msg:'Share your current GPS location so the report can be routed to the right area.'};
+  const files = Array.isArray(b.evidence) ? b.evidence.slice(0, 5) : [];
+  for (const f of files) {
+    if (!/^(image\/(jpeg|png|webp)|video\/mp4)$/.test(f.mime || '')) throw { code: 400, msg: 'Only JPG, PNG, WEBP or MP4 evidence is allowed.' };
+    if (typeof f.data !== 'string' || f.data.length > 14 * 1024 * 1024) throw { code: 400, msg: 'Evidence file too large (max ~10 MB).' };
+  }
+  const transcript = clean(b.audio_transcript, 4000), suspect = clean(b.suspect, 1000);
+  const audio = b.audio && typeof b.audio.data === 'string' ? { mime: String(b.audio.mime || '').split(';')[0], data: b.audio.data } : null;
+  if (audio && (!/^audio\/(webm|ogg|mp4|mpeg|wav|x-m4a)$/.test(audio.mime) || audio.data.length > 14 * 1024 * 1024)) throw { code: 400, msg: 'Audio must be a recording under ~10 MB.' };
+  description = needTextOrAudio(description, transcript, audio, 'Please describe what happened (at least 10 characters) or record a voice message. One of the two is needed.');
+  const analysis = rag.analyse(description + ' ' + transcript + ' ' + suspect, category);
+  let priority = triage(description + ' ' + transcript, category); if (analysis.emergency) priority = 'urgent';
+  const shareLive = b.share_live ? 1 : 0;
+  const dup = await db.get(`SELECT ref FROM reports WHERE district=? AND category=? AND created_at>?
+    AND (lower(place)=lower(?) OR ?='') ORDER BY id DESC LIMIT 1`, district, category, ago(2 * 86400), place, place);
+  const pin = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+  const ref = await newRef();
+  const r = await db.run(`INSERT INTO reports(ref,pin_hash,category,description,district,area,place,lat,lng,occurred_at,anonymous,reporter_name,reporter_phone,priority,duplicate_of,audio_transcript,suspect_details,rag_json,live_share)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, ref, hashPw(pin), category, description, district, area, place, lat, lng, occurred, anonymous, name, phone, priority, dup ? dup.ref : null, transcript, suspect, JSON.stringify(analysis), shareLive);
+  const id = r.insertId;
+  if (b.kiosk) await db.run("UPDATE reports SET source='kiosk' WHERE id=?", id);
+  await db.run('INSERT INTO status_history(report_id,status) VALUES(?,?)', id, 'Received');
+  for (const f of files) {
+    const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'video/mp4': 'mp4' }[f.mime];
+    const fname = crypto.randomBytes(12).toString('hex') + '.' + ext;
+    const stored=f.mime==='video/mp4'?storeEvidenceFile(fname,Buffer.from(f.data,'base64')):(fs.writeFileSync(path.join(UPLOADS,fname),Buffer.from(f.data,'base64')),fname);
+    await db.run('INSERT INTO evidence(report_id,filename,mime) VALUES(?,?,?)', id, stored, f.mime);
+  }
+  if (audio) {
+    const fname = crypto.randomBytes(12).toString('hex') + '.' + (audio.mime.split('/')[1] || 'webm').replace('x-m4a', 'm4a');
+    const stored=storeEvidenceFile(fname,Buffer.from(audio.data,'base64'));
+    await db.run('INSERT INTO evidence(report_id,filename,mime) VALUES(?,?,?)', id, stored, audio.mime);
+  }
+  rag.summarise(description + ' ' + transcript, analysis).then(t => t && db.run('UPDATE reports SET rag_json=? WHERE id=?', JSON.stringify({ ...analysis, summary: t }), id)).catch(() => {});
+  const pick = await pickStation(lat, lng, district, area);
+  if (pick) await db.run('UPDATE reports SET station_id=?,station_at=? WHERE id=?', pick.st.id, now(), id);
+  const dispatchNotice=pick ? `Your report was forwarded to ${pick.st.name} Police Station (${pick.st.area || pick.st.district}).` : `Your report is in the central police queue because no station is registered for ${area || district}.`;
+  await db.run("INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)",id,'police',dispatchNotice);
+  if (!anonymous) await sms(id, phone, `Uganda Police: report ${ref} received${pick ? ' and sent to ' + pick.st.name + ' Police Station' : ''}. Tracking PIN ${pin}. Priority: ${priority}.`);
+  return { ref, pin, priority, station: pick ? pick.st.name : null, emergency: analysis.emergency, advice: analysis.advice, laws: analysis.laws.slice(0, 3).map(l => ({ source: l.source, ref: l.ref })), ask: analysis.incidents.flatMap(i => i.ask).slice(0, 4) };
+});
+
+async function loadForCitizen(ctx) {
+  if (limited(ctx.ip, 'track', 20, 600000)) throw { code: 429, msg: 'Too many attempts. Wait a few minutes.' };
+  const ref = clean(ctx.body.ref, 20).toUpperCase(), pin = clean(ctx.body.pin, 12);
+  const r = await db.get('SELECT * FROM reports WHERE ref=?', ref);
+  if (!r || !checkPw(pin, r.pin_hash)) throw { code: 404, msg: 'Reference number or PIN not correct.' };
+  return r;
+}
+route('POST', '/api/track', {}, async (ctx) => {
+  const r = await loadForCitizen(ctx);
+  const station=r.station_id?await db.get('SELECT name,area FROM stations WHERE id=?',r.station_id):null;
+  return {
+    ref: r.ref, category: r.category, district: r.district, place: r.place, occurred_at: r.occurred_at,
+    description: r.description, status: r.status, anonymous: !!r.anonymous, created_at: r.created_at, updated_at: r.updated_at,
+    history: await db.all('SELECT status,created_at FROM status_history WHERE report_id=? ORDER BY id', r.id),
+    messages: await db.all('SELECT sender,body,created_at FROM messages WHERE report_id=? ORDER BY id', r.id),
+    evidence_count: (await db.get('SELECT COUNT(*) AS c FROM evidence WHERE report_id=?', r.id)).c,
+    advice: (() => { try { return JSON.parse(r.rag_json || 'null').advice || null; } catch { return null; } })(),
+    officer: r.assigned_to ? ((await db.get('SELECT full_name FROM users WHERE id=?', r.assigned_to)) || {}).full_name || null : null,
+    station: station?.name || null, station_area:station?.area || null,
+  };
+});
+route('POST', '/api/track/message', {}, async (ctx) => {
+  const r = await loadForCitizen(ctx);
+  const body = clean(ctx.body.body, 1500); if (!body) throw { code: 400, msg: 'Type a message.' };
+  await db.run('INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)', r.id, 'citizen', body);
+  await db.run('UPDATE reports SET updated_at=? WHERE id=?', now(), r.id);
+  return { ok: true };
+});
+
+// --- police auth ---
+// ---- identity checks: National ID + ID-card photo + live face + location ----
+// Face distance limits (Euclidean distance between 128-number face descriptors; lower = more similar).
+// Same person measured 0.07-0.13 in tests, different people 0.55-0.79. Override with env vars if too strict/loose.
+const FACE_LIVE_MAX = +process.env.FACE_LIVE_MAX || 0.50;    // live selfie vs enrolled face
+const FACE_ID_MAX = +process.env.FACE_ID_MAX || 0.50;        // ID-card photo vs enrolled ID photo
+const FACE_CROSS_MAX = +process.env.FACE_CROSS_MAX || 0.50;  // live selfie vs photo printed on the ID card
+const FACE_DUP_MAX = +process.env.FACE_DUP_MAX || 0.45;      // another officer already has this face
+const UG = { lat: [-1.9, 4.6], lng: [29.3, 35.2] };   // generous bounding box around Uganda
+const NIN_RE = /^C[MF][A-Z0-9]{12}$/;
+const challenges = new Map();   // one-time tokens between step 1 (NIN+password) and step 2 (face+location)
+const faceDist = (a, b) => Math.sqrt(a.reduce((t, v, i) => t + (v - b[i]) ** 2, 0));
+const goodDesc = d => Array.isArray(d) && d.length === 128 && d.every(v => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 5);
+function savePhoto(b64) {
+  if (typeof b64 !== 'string' || b64.length > 2.5 * 1024 * 1024) throw { code: 400, msg: 'Photo missing or too large.' };
+  const buf = Buffer.from(b64, 'base64');
+  if (buf.length < 1000 || buf[0] !== 0xFF || buf[1] !== 0xD8) throw { code: 400, msg: 'Photos must be JPEG.' };
+  const f = crypto.randomBytes(12).toString('hex') + '.jpg';
+  fs.writeFileSync(path.join(UPLOADS, f), buf); return f;
+}
+function storeEvidenceFile(filename, bytes) {
+  const secret=process.env.VIDEO_ENCRYPTION_KEY || '', hasKey=/^[a-f0-9]{64}$/i.test(secret);
+  if(secret&&!hasKey) throw {code:503,msg:'VIDEO_ENCRYPTION_KEY must be 64 hexadecimal characters.'};
+  if(!hasKey){fs.writeFileSync(path.join(UPLOADS,filename),bytes);return filename;}
+  const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',Buffer.from(secret,'hex'),iv),enc=Buffer.concat([cipher.update(bytes),cipher.final()]);
+  const stored=filename+'.enc';fs.writeFileSync(path.join(UPLOADS,stored),Buffer.concat([iv,cipher.getAuthTag(),enc]),{mode:0o600});return stored;
+}
+async function loginEvent(u, nin, ctx, e) {
+  await db.run(`INSERT INTO login_events(user_id,nin,success,reason,kind,lat,lng,accuracy_m,outside_ug,dist_live,dist_id,dist_cross,liveness,photo,ip,user_agent)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, u ? u.id : null, nin, e.success ? 1 : 0, e.reason, e.kind ?? null, e.lat ?? null, e.lng ?? null, e.acc ?? null, e.outside ? 1 : 0,
+    e.dLive ?? null, e.dId ?? null, e.dCross ?? null, e.liveness ? 1 : 0, e.photo ?? null, clean(ctx.ip, 64), clean(ctx.req.headers['user-agent'], 200));
+}
+
+const LOCK_MSG = 'Account locked for 15 minutes after repeated face mismatches. Contact your administrator.';
+const isLocked = async id => {
+  const u = await db.get('SELECT unlock_at FROM users WHERE id=?', id), since = ago(15 * 60);
+  const from = u && u.unlock_at && String(u.unlock_at) > since ? String(u.unlock_at) : since;
+  return (await db.get("SELECT COUNT(*) AS c FROM login_events WHERE user_id=? AND success=0 AND reason IN ('face_mismatch','id_mismatch','cross_mismatch') AND created_at>?", id, from)).c >= 5;
+};
+
+// Step 1: National ID number + password -> short-lived challenge
+route('POST', '/api/login/start', {}, async (ctx) => {
+  if (limited(ctx.ip, 'login', 10, 600000)) throw { code: 429, msg: 'Too many login attempts. Wait 10 minutes.' };
+  const badge = clean(ctx.body.badge, 32).toUpperCase().replace(/\s/g, '');
+  const name = clean(ctx.body.full_name, 80).toLowerCase();
+  const u = badge && name ? await db.get('SELECT * FROM users WHERE UPPER(badge_number)=? AND LOWER(full_name)=? AND active=1', badge, name) : null;
+  if (!u || !checkPw(String(ctx.body.password || ''), u.password_hash)) { await loginEvent(u, clean(badge,14), ctx, { success: 0, reason: 'bad_badge_or_password' }); throw { code: 401, msg: 'Name, badge number, or PIN/password is incorrect.' }; }
+  if (await isLocked(u.id)) throw { code: 429, msg: LOCK_MSG };
+  const last = (await db.get('SELECT created_at,lat,lng FROM login_events WHERE user_id=? AND success=1 ORDER BY id DESC LIMIT 1', u.id)) || null;
+  await loginEvent(u, u.nin, ctx, { success: 1, reason: 'ok', kind: 'password' });
+  const tok = crypto.randomBytes(32).toString('hex');
+  await db.run('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)', tok, u.id, new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' '));
+  await audit(u.id, 'login', 'password');
+  return { __headers: { 'Set-Cookie': `sid=${tok}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${process.env.COOKIE_SECURE === '1' ? '; Secure' : ''}` },
+    user: { username: u.username, full_name: u.full_name, role: u.role, station: u.station }, enrolled: false, outside_ug: false, last_login: last };
+});
+
+// (Removed) face / ID-card verification step. Sign-in is now National ID number + password only.
+route('POST', '/api/login/verify', {}, async (ctx) => {
+  throw { code: 410, msg: 'Face and ID-card sign-in has been removed. Sign in with your National ID number and password.' };
+  if (limited(ctx.ip, 'verify', 15, 600000)) throw { code: 429, msg: 'Too many attempts. Wait 10 minutes.' };
+  const b = ctx.body, ch = challenges.get(b.challenge);
+  if (!ch || ch.exp < Date.now()) throw { code: 401, msg: 'Session expired. Enter your National ID number and password again.' };
+  const u = await db.get('SELECT * FROM users WHERE id=? AND active=1', ch.userId);
+  if (!u) throw { code: 401, msg: 'Account is not active.' };
+  if (await isLocked(u.id)) throw { code: 429, msg: LOCK_MSG };
+  const fail = async (code, reason, msg, extra = {}) => { await loginEvent(u, u.nin, ctx, { success: 0, reason, kind: u.face_enrolled_at ? 'verify' : 'enrol', ...loc, ...extra }); throw { code, msg }; };
+  // location is mandatory
+  const lat = Number(b.lat), lng = Number(b.lng), acc = Number(b.accuracy);
+  const hasLoc = b.lat !== null && b.lat !== '' && b.lng !== null && b.lng !== '' && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  const loc = hasLoc ? { lat, lng, acc: Number.isFinite(acc) ? acc : null, outside: !(lat >= UG.lat[0] && lat <= UG.lat[1] && lng >= UG.lng[0] && lng <= UG.lng[1]) } : {};
+  if (!hasLoc) await fail(400, 'no_location', 'Location is required to log in. Allow location access and try again.');
+  if (!goodDesc(b.id_descriptor) || !goodDesc(b.live_descriptor)) await fail(400, 'no_face', 'We could not read a face from the ID card and from your camera. Try again in good light.');
+  const idPhoto = savePhoto(b.id_photo), livePhoto = savePhoto(b.live_photo);
+  const liveness = b.liveness === true;
+  const dCross = faceDist(b.id_descriptor, b.live_descriptor);
+  const base = { dCross, liveness, photo: livePhoto };
+  if (dCross > FACE_CROSS_MAX) await fail(403, 'cross_mismatch', 'Wrong Face ID: your face does not match the photo on the National ID.', base);
+  const kind = u.face_enrolled_at ? 'verify' : 'enrol';
+  let dLive = null, dId = null;
+  if (kind === 'verify') {
+    const ef = JSON.parse(u.face_descriptor), ei = JSON.parse(u.id_descriptor);
+    dLive = Math.min(faceDist(b.live_descriptor, ef), faceDist(b.live_descriptor, ei));
+    dId = faceDist(b.id_descriptor, ei);
+    if (dLive > FACE_LIVE_MAX) await fail(403, 'face_mismatch', 'Wrong Face ID: this is not the officer enrolled on this account.', { ...base, dLive, dId });
+    if (dId > FACE_ID_MAX) await fail(403, 'id_mismatch', 'The National ID shown is not the one enrolled on this account.', { ...base, dLive, dId });
+  } else {
+    // first login: make sure this face is not already enrolled for another officer
+    for (const o of await db.all('SELECT id,full_name,nin,face_descriptor,id_descriptor FROM users WHERE face_enrolled_at IS NOT NULL AND id<>?', u.id)) {
+      const d = Math.min(faceDist(b.live_descriptor, JSON.parse(o.face_descriptor)), faceDist(b.live_descriptor, JSON.parse(o.id_descriptor)), faceDist(b.id_descriptor, JSON.parse(o.id_descriptor)));
+      if (d < FACE_DUP_MAX) await fail(409, 'duplicate_face', `This face appears to already be enrolled for ${o.full_name} (${o.nin}).`, base);
+    }
+    await db.run('UPDATE users SET face_descriptor=?,id_descriptor=?,id_photo=?,face_photo=?,face_enrolled_at=? WHERE id=?',
+      JSON.stringify(b.live_descriptor), JSON.stringify(b.id_descriptor), idPhoto, livePhoto, now(), u.id);
+  }
+  challenges.delete(b.challenge);
+  const last = (await db.get('SELECT created_at,lat,lng FROM login_events WHERE user_id=? AND success=1 ORDER BY id DESC LIMIT 1', u.id)) || null;
+  await loginEvent(u, u.nin, ctx, { success: 1, reason: kind === 'enrol' ? 'enrolled' : 'ok', kind, ...loc, ...base, dLive, dId });
+  const tok = crypto.randomBytes(32).toString('hex');
+  await db.run('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)', tok, u.id, new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' '));
+  await audit(u.id, 'login', `${kind} @ ${loc.lat},${loc.lng}${loc.outside ? ' OUTSIDE UGANDA' : ''}`);
+  return { __headers: { 'Set-Cookie': `sid=${tok}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${process.env.COOKIE_SECURE === '1' ? '; Secure' : ''}` },
+    user: { username: u.username, full_name: u.full_name, role: u.role, station: u.station }, enrolled: kind === 'enrol', outside_ug: !!loc.outside, last_login: last };
+});
+route('POST', '/api/logout', { auth: true }, async (ctx) => {
+  await db.run('DELETE FROM sessions WHERE token=?', cookie(ctx.req, 'sid'));
+  return { __headers: { 'Set-Cookie': 'sid=; HttpOnly; Path=/; Max-Age=0' }, ok: true };
+});
+route('GET', '/api/me', {}, (ctx) => ({ user: ctx.user }));
+
+// --- police reports ---
+const REPORT_COLS = `r.ref,r.category,r.description,r.district,r.area,r.place,r.lat,r.lng,r.occurred_at,r.anonymous,r.priority,r.status,r.duplicate_of,r.created_at,r.updated_at,u.full_name assigned_name,r.assigned_to,r.station_id,st.name station_name,r.source,r.ob_number`;
+route('GET', '/api/police/reports', { auth: true }, async (ctx) => {
+  const q = ctx.query, where = [], args = [];
+  if (ctx.user.role === 'commander') { where.push('r.station_id IN (SELECT id FROM stations WHERE name=?)'); args.push(ctx.user.station || ''); }
+  if (ctx.user.role === 'officer') { where.push('(r.assigned_to=? OR r.station_id IN (SELECT id FROM stations WHERE name=?))'); args.push(ctx.user.id, ctx.user.station || ''); }
+  if (ctx.user.role === 'cid') where.push("r.priority IN ('urgent','high')");
+  if (q.status) { where.push('r.status=?'); args.push(q.status); }
+  if (q.district) { where.push('r.district=?'); args.push(q.district); }
+  if (q.category) { where.push('r.category=?'); args.push(q.category); }
+  if (q.priority) { where.push('r.priority=?'); args.push(q.priority); }
+  if (q.mine === 's') { where.push('r.station_id IN (SELECT id FROM stations WHERE name=?)'); args.push(ctx.user.station || ''); }
+  if (q.mine === 'w') where.push("r.source='walk_in'");
+  if (q.mine === '1') { where.push('r.assigned_to=?'); args.push(ctx.user.id); }
+  if (q.q) { where.push('(r.ref LIKE ? OR r.description LIKE ? OR r.place LIKE ?)'); const l = '%' + q.q + '%'; args.push(l, l, l); }
+  const rows = await db.all(`SELECT ${REPORT_COLS} FROM reports r LEFT JOIN users u ON u.id=r.assigned_to LEFT JOIN stations st ON st.id=r.station_id
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+    ORDER BY CASE r.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, CASE WHEN r.status='Resolved' THEN 1 ELSE 0 END, r.created_at DESC LIMIT 500`, ...args);
+  return { reports: rows };
+});
+route('GET','/api/police/history',{auth:true},async(ctx)=>{
+  const id=ctx.user.id;
+  const reports=await db.all(`SELECT DISTINCT ${REPORT_COLS} FROM reports r LEFT JOIN users u ON u.id=r.assigned_to LEFT JOIN stations st ON st.id=r.station_id
+    LEFT JOIN case_assignments ca ON ca.report_id=r.id LEFT JOIN notes n ON n.report_id=r.id LEFT JOIN status_history h ON h.report_id=r.id
+    WHERE r.assigned_to=? OR ca.user_id=? OR n.user_id=? OR h.user_id=?
+    ORDER BY r.updated_at DESC LIMIT 500`,id,id,id,id);
+  return {reports};
+});
+// ---- walk-in reports: an officer records a complaint made in person (replaces the paper Occurrence Book entry) ----
+route('POST', '/api/police/analyse', { auth: true }, async (ctx) => {
+  const a = rag.analyse(clean(ctx.body.text, 6000), clean(ctx.body.category, 40)); const cat = clean(ctx.body.category, 40), prio = a.emergency ? 'urgent' : triage(clean(ctx.body.text, 6000), cat); return { emergency: a.emergency, priority: prio, serious: a.emergency || prio !== 'normal', incidents: a.incidents, laws: a.laws.slice(0, 4), advice: a.advice };
+});
+route('POST', '/api/police/walkin', { auth: true }, async (ctx) => {
+  const b = ctx.body, name = clean(b.name, 80), phone = clean(b.phone, 20), idType = clean(b.id_type, 24), idNo = clean(b.id_no, 30);
+  const category = clean(b.category, 40), district = clean(b.district, 40), place = clean(b.place, 120), suspect = clean(b.suspect, 1000); let description = clean(b.description, 4000);
+  if (!name) throw { code: 400, msg: 'Enter the complainant\u2019s name.' };
+  if (phone && !/^\+?\d[\d\s-]{7,16}$/.test(phone)) throw { code: 400, msg: 'Phone number is not valid.' };
+  if (idType && idType !== 'None' && (!idNo || !b.id_seen)) throw { code: 400, msg: 'Enter the ID number and confirm you have seen the original ID.' };
+  if (!CATEGORIES.includes(category)) throw { code: 400, msg: 'Choose the crime category.' };
+  if (!DISTRICTS.includes(district)) throw { code: 400, msg: 'Choose a district.' };
+  const occurred = clean(b.occurred_at, 20).replace('T', ' ');
+  if (!/^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(occurred)) throw { code: 400, msg: 'Enter when it happened.' };
+  const lat = b.lat !== '' && b.lat != null && Number.isFinite(+b.lat) ? +b.lat : null, lng = b.lng !== '' && b.lng != null && Number.isFinite(+b.lng) ? +b.lng : null;
+  const sig = typeof b.signature === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.signature) && b.signature.length < 600000 ? b.signature : null;
+  const audio = b.audio && typeof b.audio.data === 'string' ? { mime: String(b.audio.mime || '').split(';')[0], data: b.audio.data } : null;
+  if (audio && (!/^audio\/(webm|ogg|mp4|mpeg|wav|x-m4a)$/.test(audio.mime) || audio.data.length > 14 * 1024 * 1024)) throw { code: 400, msg: 'Audio must be a recording under ~10 MB.' };
+  description = needTextOrAudio(description, '', audio, 'Type the statement (at least 10 characters) or record an audio statement. One of the two is needed.');
+  const analysis = rag.analyse(description + ' ' + suspect, category);
+  let priority = triage(description, category); if (analysis.emergency) priority = 'urgent';
+  let st = ctx.user.station ? await db.get('SELECT * FROM stations WHERE active=1 AND name=?', ctx.user.station) : null;
+  if (!st) { const p = await pickStation(lat, lng, district, clean(b.area,100)); st = p && p.st; }
+  const area=clean(b.area || (st && st.area) || '',100);
+  const yr = new Date().getFullYear(), code = (st ? st.name : 'HQ').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'HQ';
+  const n = st ? (await db.get("SELECT COUNT(*) c FROM reports WHERE source='walk_in' AND station_id=? AND created_at>=?", st.id, yr + '-01-01')).c + 1 : 1;
+  const ob = `OB/${code}/${yr}/${String(n).padStart(4, '0')}`;
+  const pin = String(crypto.randomInt(0, 1000000)).padStart(6, '0'), ref = await newRef();
+  const r = await db.run(`INSERT INTO reports(ref,pin_hash,category,description,district,area,place,lat,lng,occurred_at,anonymous,reporter_name,reporter_phone,priority,suspect_details,rag_json,source,ob_number,complainant_id,intake_by,signature_data,signed_at,assigned_to,status,station_id,station_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,'walk_in',?,?,?,?,?,?,'Assigned to officer',?,?)`, ref, hashPw(pin), category, description, district, area, place, lat, lng, occurred, name, phone || null, priority, suspect, JSON.stringify(analysis), ob, idType && idType !== 'None' ? idType + ': ' + idNo : 'No ID', ctx.user.id, sig, sig ? now() : null, ctx.user.id, st ? st.id : null, st ? now() : null);
+  const id = r.insertId;
+  await db.run('INSERT INTO status_history(report_id,status,user_id) VALUES(?,?,?)', id, 'Received', ctx.user.id);
+  await db.run('INSERT INTO status_history(report_id,status,user_id) VALUES(?,?,?)', id, 'Assigned to officer', ctx.user.id);
+  await db.run('INSERT INTO case_assignments(report_id,user_id,assigned_by,assigned_at) VALUES(?,?,?,?)',id,ctx.user.id,ctx.user.id,now());
+  await db.run('INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)',id,'police',`Your walk-in report was received at ${st ? st.name + ' Police Station' : 'the central police desk'}.`);
+  if (audio) {
+    const fname = crypto.randomBytes(12).toString('hex') + '.' + (audio.mime.split('/')[1] || 'webm').replace('x-m4a', 'm4a');
+    const stored=storeEvidenceFile(fname,Buffer.from(audio.data,'base64'));
+    await db.run('INSERT INTO evidence(report_id,filename,mime) VALUES(?,?,?)', id, stored, audio.mime);
+  }
+  if (phone) await sms(id, phone, `Uganda Police: your complaint ${ob} was recorded. Reference ${ref}, PIN ${pin}. Track it on the police e-Crime portal.`);
+  await audit(ctx.user.id, 'walkin_report', `${ref} ${ob}`);
+  return { ref, pin, ob_number: ob, station: st ? st.name : null, officer: ctx.user.full_name, created_at: now(), priority, emergency: analysis.emergency, category, name, id_label: idType && idType !== 'None' ? idType + ' ' + idNo.slice(-4).padStart(idNo.length, '*') : 'No ID', phone, signature: sig, advice: analysis.advice };
+});
+// ---- police posts: register, list, retire; alerts for new cases in your area ----
+route('GET', '/api/police/stations', { auth: true }, async () => ({ stations: await db.all(`SELECT s.id,s.name,s.area,s.district,s.lat,s.lng,s.phone,
+  (SELECT COUNT(*) FROM reports r WHERE r.station_id=s.id AND r.status<>'Resolved') open_cases FROM stations s WHERE s.active=1 ORDER BY s.name`) }));
+route('POST', '/api/police/stations', { auth: true }, async (ctx) => {
+  const b = ctx.body, name = clean(b.name, 100), area=clean(b.area,100), district=clean(b.district,60), lat = Number(b.lat), lng = Number(b.lng);
+  if (!name || !area || !DISTRICTS.includes(district) || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw { code: 400, msg: 'Station name, service area, district and a valid map location are required.' };
+  if(await db.get('SELECT id FROM stations WHERE active=1 AND LOWER(name)=LOWER(?)',name)) throw {code:409,msg:'An active station with this name is already registered.'};
+  const r = await db.run('INSERT INTO stations(name,area,district,lat,lng,radius_km,phone,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)', name, area, district, lat, lng, 5, clean(b.phone, 30), ctx.user.id, now());
+  if (!ctx.user.station) await db.run('UPDATE users SET station=? WHERE id=?', name, ctx.user.id);
+  let moved = 0;   // route waiting cases by matching service area, never distance
+  for (const x of await db.all("SELECT id,lat,lng,district,area FROM reports WHERE station_id IS NULL AND status<>'Resolved'")) { const p = await pickStation(x.lat, x.lng, x.district, x.area); if (p) { await db.run('UPDATE reports SET station_id=?,station_at=? WHERE id=?', p.st.id, now(), x.id); await db.run('INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)',x.id,'police',`Your report was forwarded to ${p.st.name} Police Station (${p.st.area}).`); moved++; } }
+  await audit(ctx.user.id, 'station_register', name);
+  return { ok: true, id: r.insertId || r.lastID, moved, station: ctx.user.station || name };
+});
+route('DELETE', '/api/police/stations/:id', { auth: true, roles: ['commander', 'admin'] }, async (ctx) => {
+  const reports=await db.all('SELECT id FROM reports WHERE station_id=?',+ctx.params[0]);
+  await db.run('UPDATE stations SET active=0 WHERE id=?', +ctx.params[0]); await db.run('UPDATE reports SET station_id=NULL WHERE station_id=?', +ctx.params[0]);
+  for(const r of reports) await db.run('INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)',r.id,'police','This case is in the central police queue while it is matched to an active station for its service area.');
+  await audit(ctx.user.id, 'station_remove', ctx.params[0]); return { ok: true };
+});
+route('GET', '/api/police/alerts', { auth: true }, async (ctx) => {
+  const max = (await db.get('SELECT COALESCE(MAX(id),0) m FROM reports')).m;
+  if (ctx.query.since === undefined) return { alerts: [], max };
+  const all = ctx.user.role === 'admin' || ctx.user.role === 'cid' || !ctx.user.station;   // CID follows serious cases in every district
+  const rows = await db.all(`SELECT r.id,r.ref,r.category,r.priority,r.district,r.place,r.lat,r.lng,st.name station FROM reports r LEFT JOIN stations st ON st.id=r.station_id
+    WHERE r.id>? AND r.status<>'Resolved' ${ctx.user.role === 'cid' ? "AND r.priority<>'normal'" : ''} ${all ? '' : (ctx.user.role === 'commander' ? 'AND (st.name=? OR r.station_id IS NULL)' : 'AND st.name=?')} ORDER BY r.id LIMIT 20`, +ctx.query.since || 0, ...(all ? [] : [ctx.user.station]));
+  return { alerts: rows, max };
+});
+// DEMO phone: shows texts sent to a number (stand-in for a real SMS gateway)
+route('GET', '/api/inbox', {}, async (ctx) => {
+  if (limited(ctx.ip, 'inbox', 120, 600000)) throw { code: 429, msg: 'Slow down.' };
+  const k = phoneKey(ctx.query.phone); if (k.length !== 9) throw { code: 400, msg: 'Enter the phone number used in the report.' };
+  return { messages: await db.all('SELECT body,created_at FROM sms_outbox WHERE to_phone=? ORDER BY id DESC LIMIT 50', k) };
+});
+route('GET', '/api/police/reports/:ref', { auth: true }, async (ctx) => {
+  const r = await db.get('SELECT r.*,u.full_name assigned_name,st.name station_name FROM reports r LEFT JOIN users u ON u.id=r.assigned_to LEFT JOIN stations st ON st.id=r.station_id WHERE r.ref=?', ctx.params[0]);
+  if (!r) throw { code: 404, msg: 'Not found' };
+  if (ctx.user.role === 'officer' && r.assigned_to !== ctx.user.id && (!ctx.user.station || r.station_name !== ctx.user.station) && !(await hasWorkedOnCase(ctx.user.id,r.id))) throw { code: 403, msg: 'This case belongs to another station.' };
+  if (ctx.user.role === 'commander' && r.station_name !== ctx.user.station) throw { code: 403, msg: 'This case belongs to another station.' };
+  if (ctx.user.role === 'cid' && !['urgent','high'].includes(r.priority)) throw { code: 403, msg: 'CID access is limited to high priority cases.' };
+  delete r.pin_hash; try { r.rag = JSON.parse(r.rag_json || 'null'); } catch { r.rag = null; } delete r.rag_json;
+  await audit(ctx.user.id, 'view_report', r.ref);
+  return {
+    report: r,
+    evidence: await db.all('SELECT id,mime FROM evidence WHERE report_id=?', r.id),
+    messages: await db.all('SELECT sender,body,created_at FROM messages WHERE report_id=? ORDER BY id', r.id),
+    notes: await db.all('SELECT n.body,n.created_at,u.full_name FROM notes n JOIN users u ON u.id=n.user_id WHERE n.report_id=? ORDER BY n.id', r.id),
+    history: await db.all('SELECT h.status,h.created_at,u.full_name FROM status_history h LEFT JOIN users u ON u.id=h.user_id WHERE h.report_id=? ORDER BY h.id', r.id),
+  };
+});
+route('PATCH', '/api/police/reports/:ref', { auth: true }, async (ctx) => {
+  const r = await db.get('SELECT * FROM reports WHERE ref=?', ctx.params[0]);
+  if (!r) throw { code: 404, msg: 'Not found' };
+  const stationName = r.station_id ? await db.get('SELECT name FROM stations WHERE id=?',r.station_id) : null;
+  if (ctx.user.role === 'officer' && r.assigned_to !== ctx.user.id && (!stationName || stationName.name !== ctx.user.station) && !(await hasWorkedOnCase(ctx.user.id,r.id))) throw {code:403,msg:'This case belongs to another station.'};
+  if (ctx.user.role === 'commander' && (!stationName || stationName.name !== ctx.user.station)) throw {code:403,msg:'This case belongs to another station.'};
+  if (ctx.user.role === 'cid' && !['urgent','high'].includes(r.priority)) throw {code:403,msg:'This case is not available to CID.'};
+  const b = ctx.body;
+  if (b.status !== undefined) {
+    if (!STATUSES.includes(b.status)) throw { code: 400, msg: 'Bad status' };
+    if (b.status !== r.status) {
+      await db.run('UPDATE reports SET status=?,updated_at=? WHERE id=?', b.status, now(), r.id);
+      await db.run('INSERT INTO status_history(report_id,status,user_id) VALUES(?,?,?)', r.id, b.status, ctx.user.id);
+      await audit(ctx.user.id, 'status_change', `${r.ref}: ${r.status} -> ${b.status}`);
+    }
+  }
+  if (b.priority !== undefined && ['normal', 'high', 'urgent'].includes(b.priority)) {
+    await db.run('UPDATE reports SET priority=?,updated_at=? WHERE id=?', b.priority, now(), r.id);
+    await audit(ctx.user.id, 'priority_change', `${r.ref}: ${b.priority}`);
+  }
+  if (b.station_id !== undefined && !['officer', 'cid'].includes(ctx.user.role)) {
+    const dest=b.station_id ? await db.get('SELECT id,name,area FROM stations WHERE id=? AND active=1',+b.station_id) : null;
+    if(b.station_id&&!dest) throw {code:400,msg:'Choose an active registered station.'};
+    await db.run('UPDATE reports SET station_id=?,station_at=?,updated_at=? WHERE id=?', b.station_id ? +b.station_id : null, now(), now(), r.id);
+    const body=dest?`Your report was forwarded to ${dest.name} Police Station (${dest.area||'the registered service area'}).`:'Your report is waiting in the central queue for a matching registered police service area.';
+    await db.run('INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)',r.id,'police',body);
+    await audit(ctx.user.id, 'reassign_station', `${r.ref} -> ${b.station_id || 'none'}`);
+  }
+  if (b.assigned_to !== undefined) {
+    if (['officer', 'cid'].includes(ctx.user.role) && b.assigned_to !== ctx.user.id && b.assigned_to !== null) throw { code: 403, msg: 'Only commanders can assign to others.' };
+    const aid = b.assigned_to === null ? null : +b.assigned_to;
+    if (aid && !(await db.get('SELECT 1 AS x FROM users WHERE id=? AND active=1', aid))) throw { code: 400, msg: 'Unknown officer' };
+    await db.run('UPDATE reports SET assigned_to=?,updated_at=? WHERE id=?', aid, now(), r.id);
+    if(aid&&aid!==r.assigned_to) await db.run('INSERT INTO case_assignments(report_id,user_id,assigned_by,assigned_at) VALUES(?,?,?,?)',r.id,aid,ctx.user.id,now());
+    if (aid && r.status !== 'Assigned to officer' && r.status !== 'Resolved') {
+      await db.run("UPDATE reports SET status='Assigned to officer' WHERE id=?", r.id);
+      await db.run('INSERT INTO status_history(report_id,status,user_id) VALUES(?,?,?)', r.id, 'Assigned to officer', ctx.user.id);
+    }
+    await audit(ctx.user.id, 'assign', `${r.ref} -> user ${aid}`);
+  }
+  return { ok: true };
+});
+route('POST', '/api/police/reports/:ref/message', { auth: true }, async (ctx) => {
+  const r = await db.get('SELECT id,ref,station_id FROM reports WHERE ref=?', ctx.params[0]); if (!r) throw { code: 404, msg: 'Not found' };
+  const access=await db.get('SELECT r.assigned_to,r.priority,st.name station_name FROM reports r LEFT JOIN stations st ON st.id=r.station_id WHERE r.id=?',r.id);
+  if (ctx.user.role==='officer'&&access.assigned_to!==ctx.user.id&&access.station_name!==ctx.user.station&&!(await hasWorkedOnCase(ctx.user.id,r.id))) throw {code:403,msg:'This case belongs to another station.'};
+  if (ctx.user.role==='commander'&&access.station_name!==ctx.user.station) throw {code:403,msg:'This case belongs to another station.'};
+  if (ctx.user.role==='cid'&&!['urgent','high'].includes(access.priority)) throw {code:403,msg:'This case is not available to CID.'};
+  const body = clean(ctx.body.body, 1500); if (!body) throw { code: 400, msg: 'Type a message.' };
+  const station=r.station_id?await db.get('SELECT name FROM stations WHERE id=?',r.station_id):null;
+  const routedBody=`${station?`[${station.name} Police Station] `:'[Police central queue] '}${body}`;
+  await db.run('INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)', r.id, 'police', routedBody);
+  const full = await db.get('SELECT reporter_phone,anonymous FROM reports WHERE id=?', r.id);
+  if (full && !full.anonymous && full.reporter_phone) await sms(r.id, full.reporter_phone, `Uganda Police${station?' · '+station.name+' Police Station':''} (${r.ref}): ${body}`);
+  await audit(ctx.user.id, 'message_citizen', r.ref);
+  return { ok: true };
+});
+route('POST', '/api/police/reports/:ref/note', { auth: true }, async (ctx) => {
+  const r = await db.get('SELECT id,ref FROM reports WHERE ref=?', ctx.params[0]); if (!r) throw { code: 404, msg: 'Not found' };
+  const access=await db.get('SELECT r.assigned_to,r.priority,st.name station_name FROM reports r LEFT JOIN stations st ON st.id=r.station_id WHERE r.id=?',r.id);
+  if (ctx.user.role==='officer'&&access.assigned_to!==ctx.user.id&&access.station_name!==ctx.user.station&&!(await hasWorkedOnCase(ctx.user.id,r.id))) throw {code:403,msg:'This case belongs to another station.'};
+  if (ctx.user.role==='commander'&&access.station_name!==ctx.user.station) throw {code:403,msg:'This case belongs to another station.'};
+  if (ctx.user.role==='cid'&&!['urgent','high'].includes(access.priority)) throw {code:403,msg:'This case is not available to CID.'};
+  const body = clean(ctx.body.body, 3000); if (!body) throw { code: 400, msg: 'Type a note.' };
+  await db.run('INSERT INTO notes(report_id,user_id,body) VALUES(?,?,?)', r.id, ctx.user.id, body);
+  await audit(ctx.user.id, 'add_note', r.ref);
+  return { ok: true };
+});
+// Sensitive case video: explicit consent, encrypted at rest (AES-256-GCM), one submission per case.
+route('POST', '/api/police/reports/:ref/sensitive-video', { auth: true }, async (ctx) => {
+  const r = await db.get('SELECT * FROM reports WHERE ref=?',ctx.params[0]); if (!r) throw {code:404,msg:'Case not found.'};
+  const station = r.station_id ? await db.get('SELECT name FROM stations WHERE id=?',r.station_id) : null;
+  if (ctx.user.role === 'officer' && r.assigned_to !== ctx.user.id && (!ctx.user.station || !station || station.name !== ctx.user.station) && !(await hasWorkedOnCase(ctx.user.id,r.id))) throw {code:403,msg:'This case belongs to another station.'};
+  if (ctx.user.role === 'commander' && (!station || station.name !== ctx.user.station)) throw {code:403,msg:'This case belongs to another station.'};
+  if (ctx.user.role === 'cid' && !['urgent','high'].includes(r.priority)) throw {code:403,msg:'This case is not available to CID.'};
+  if (!ctx.body.consent) throw {code:400,msg:'Record and confirm consent before recording.'};
+  const secret = process.env.VIDEO_ENCRYPTION_KEY || '';
+  if (!/^(?:[a-f0-9]{64}|[A-F0-9]{64})$/.test(secret)) throw {code:503,msg:'Sensitive video encryption is not configured. Set VIDEO_ENCRYPTION_KEY to 64 hexadecimal characters.'};
+  const video = ctx.body.video || {}; if (!/^video\/(webm|mp4)$/.test(video.mime || '') || typeof video.data !== 'string' || video.data.length > 22*1024*1024) throw {code:400,msg:'Video must be WebM or MP4 under 16 MB.'};
+  const key = Buffer.from(secret,'hex'), iv = crypto.randomBytes(12), cipher = crypto.createCipheriv('aes-256-gcm',key,iv);
+  const enc = Buffer.concat([cipher.update(Buffer.from(video.data,'base64')),cipher.final()]), tag = cipher.getAuthTag();
+  const fname = crypto.randomBytes(16).toString('hex') + '.enc', target = path.join(UPLOADS,fname);
+  // Reserve the one allowed submission atomically before committing evidence.
+  const claim = await db.run('UPDATE reports SET sensitive_video_used=1,sensitive_video_consent_at=? WHERE id=? AND sensitive_video_used=0',now(),r.id);
+  if (!claim.changes) throw {code:409,msg:'This case has already used its one-time sensitive video recording.'};
+  try {
+    fs.writeFileSync(target,Buffer.concat([iv,tag,enc]),{mode:0o600});
+    await db.run('INSERT INTO evidence(report_id,filename,mime) VALUES(?,?,?)',r.id,fname,video.mime);
+    await audit(ctx.user.id,'sensitive_video_submitted',r.ref+' consent='+now());
+  } catch (e) { try { fs.unlinkSync(target); } catch {} throw e; }
+  return {ok:true,used:true};
+});
+route('GET', '/api/police/stats', { auth: true }, async (ctx) => {
+  let filter='',args=[];
+  if(ctx.user.role==='commander'){filter=' WHERE r.station_id IN (SELECT id FROM stations WHERE name=?)';args=[ctx.user.station||''];}
+  else if(ctx.user.role==='officer'){filter=' WHERE (r.assigned_to=? OR r.station_id IN (SELECT id FROM stations WHERE name=?))';args=[ctx.user.id,ctx.user.station||''];}
+  else if(ctx.user.role==='cid') filter=" WHERE r.priority IN ('urgent','high')";
+  const one = async (sql, ...a) => (await db.get(sql, ...a)).c;
+  const and = filter ? ' AND ' : ' WHERE ';
+  return {
+    total: await one(`SELECT COUNT(*) AS c FROM reports r${filter}`,...args),
+    open: await one(`SELECT COUNT(*) AS c FROM reports r${filter}${and}r.status NOT IN ('Resolved','Rejected')`,...args),
+    resolved: await one(`SELECT COUNT(*) AS c FROM reports r${filter}${and}r.status='Resolved'`,...args),
+    urgent: await one(`SELECT COUNT(*) AS c FROM reports r${filter}${and}r.priority='urgent' AND r.status NOT IN ('Resolved','Rejected')`,...args),
+    byCategory: await db.all(`SELECT r.category AS k, COUNT(*) AS n FROM reports r${filter} GROUP BY r.category ORDER BY n DESC`,...args),
+    byDistrict: await db.all(`SELECT r.district AS k, COUNT(*) AS n FROM reports r${filter} GROUP BY r.district ORDER BY n DESC LIMIT 10`,...args),
+    byStatus: await db.all(`SELECT r.status AS k, COUNT(*) AS n FROM reports r${filter} GROUP BY r.status`,...args),
+    byDay: await db.all(`SELECT DATE(r.created_at) AS k, COUNT(*) AS n FROM reports r${filter}${and}r.created_at>? GROUP BY DATE(r.created_at) ORDER BY k`,...args,ago(14*86400)),
+    points: await db.all(`SELECT r.ref,r.category,r.lat,r.lng,r.priority,r.district,r.status FROM reports r${filter}${and}r.lat IS NOT NULL AND r.lng IS NOT NULL`,...args),
+  };
+});
+route('GET', '/api/police/officers', { auth: true }, async (ctx) => ({ officers: await db.all('SELECT id,full_name,station,role FROM users WHERE active=1 AND (?=\'admin\' OR station=?) ORDER BY full_name', ctx.user.role, ctx.user.station || '') }));
+route('GET', '/api/police/export.csv', { auth: true, roles: ['commander', 'admin'] }, async (ctx) => {
+  const where=ctx.user.role==='admin'?'':'WHERE r.station_id IN (SELECT id FROM stations WHERE name=?)', args=ctx.user.role==='admin'?[]:[ctx.user.station||''];
+  const rows = await db.all(`SELECT ${REPORT_COLS} FROM reports r LEFT JOIN users u ON u.id=r.assigned_to LEFT JOIN stations st ON st.id=r.station_id ${where} ORDER BY r.id`,...args);
+  const cols = ['ref', 'category', 'district', 'place', 'occurred_at', 'priority', 'status', 'assigned_name', 'created_at', 'description'];
+  const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  await audit(ctx.user.id, 'export_csv', rows.length + ' rows');
+  return { __raw: [cols.join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\n'), __type: 'text/csv', __headers: { 'Content-Disposition': 'attachment; filename="reports.csv"' } };
+});
+
+// --- admin ---
+route('GET', '/api/admin/users', { auth: true, roles: ['admin','commander'] }, async (ctx) => {
+  const users = await db.all('SELECT id,username,full_name,role,station,nin,badge_number,face_enrolled_at,active,created_at FROM users ORDER BY id');
+  const visible = ctx.user.role === 'admin' ? users : users.filter(u => u.station === ctx.user.station && ['officer','cid'].includes(u.role));
+  for (const u of visible) u.locked = await isLocked(u.id);
+  return { users: visible };
+});
+route('POST', '/api/admin/users', { auth: true, roles: ['admin','commander'] }, async (ctx) => {
+  const b = ctx.body, username = clean(b.username, 40).toLowerCase(), pw = String(b.password || '');
+  if (!/^[a-z0-9._-]{3,40}$/.test(username)) throw { code: 400, msg: 'Username: 3-40 letters/numbers.' };
+  if (pw.length < 8) throw { code: 400, msg: 'Password must be at least 8 characters.' };
+  if (!['officer', 'cid', 'commander', 'admin'].includes(b.role)) throw { code: 400, msg: 'Bad role' };
+  const nin = clean(b.nin, 20).toUpperCase().replace(/\s/g, '');
+  if (!NIN_RE.test(nin)) throw { code: 400, msg: 'National ID number must be 14 characters, starting with CM or CF.' };
+  const badge = clean(b.badge_number,32).toUpperCase().replace(/\s/g,'');
+  if (!/^[A-Z0-9-]{3,32}$/.test(badge)) throw { code: 400, msg: 'Badge number must be 3-32 letters or numbers.' };
+  const station = ctx.user.role === 'admin' ? clean(b.station,80) : ctx.user.station;
+  const role = ctx.user.role === 'admin' ? b.role : 'officer';
+  if (!station) throw { code: 400, msg: 'Set your station before managing officers.' };
+  if (await db.get('SELECT 1 AS x FROM users WHERE username=? OR nin=? OR UPPER(badge_number)=?', username, nin, badge)) throw { code: 409, msg: 'Username, National ID, or badge already exists.' };
+  await db.run('INSERT INTO users(username,full_name,role,station,password_hash,nin,badge_number) VALUES(?,?,?,?,?,?,?)', username, clean(b.full_name, 80), role, station, hashPw(pw), nin, badge);
+  await audit(ctx.user.id, 'create_user', username);
+  return { ok: true };
+});
+route('PATCH', '/api/admin/users/:id', { auth: true, roles: ['admin','commander'] }, async (ctx) => {
+  const id = +ctx.params[0]; if (id === ctx.user.id) throw { code: 400, msg: 'You cannot change your own account here.' };
+  if (ctx.user.role !== 'admin' && !(await db.get("SELECT 1 AS x FROM users WHERE id=? AND station=? AND role IN ('officer','cid')",id,ctx.user.station))) throw { code: 403, msg: 'You can only manage officers at your station.' };
+  if (ctx.body.active !== undefined) await db.run('UPDATE users SET active=? WHERE id=?', ctx.body.active ? 1 : 0, id);
+  if (ctx.body.full_name !== undefined) { const name=clean(ctx.body.full_name,80); if (!name) throw {code:400,msg:'Enter an officer name.'}; await db.run('UPDATE users SET full_name=? WHERE id=?',name,id); }
+  if (ctx.body.badge_number !== undefined) { const badge=clean(ctx.body.badge_number,32).toUpperCase().replace(/\s/g,''); if (!/^[A-Z0-9-]{3,32}$/.test(badge)) throw {code:400,msg:'Badge number must be 3-32 letters or numbers.'}; if (await db.get('SELECT 1 AS x FROM users WHERE UPPER(badge_number)=? AND id<>?',badge,id)) throw {code:409,msg:'Badge number already exists.'}; await db.run('UPDATE users SET badge_number=? WHERE id=?',badge,id); }
+  if (ctx.body.unlock) { await db.run('UPDATE users SET unlock_at=? WHERE id=?', now(), id); await audit(ctx.user.id, 'unlock_user', String(id)); }
+  if (ctx.body.reset_face) { await db.run('UPDATE users SET face_descriptor=NULL,id_descriptor=NULL,face_enrolled_at=NULL,unlock_at=? WHERE id=?', now(), id); await db.run('DELETE FROM sessions WHERE user_id=?', id); await audit(ctx.user.id, 'reset_face', String(id)); }
+  if (ctx.body.password) { if (String(ctx.body.password).length < 8) throw { code: 400, msg: 'Password too short.' }; await db.run('UPDATE users SET password_hash=? WHERE id=?', hashPw(String(ctx.body.password)), id); }
+  await audit(ctx.user.id, 'update_user', String(id));
+  return { ok: true };
+});
+route('GET', '/api/admin/audit', { auth: true, roles: ['admin'] }, async () => ({ log: await db.all('SELECT a.created_at,a.action,a.detail,u.username FROM audit_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.id DESC LIMIT 200') }));
+route('GET', '/api/admin/news', { auth: true, roles: ['admin'] }, async () => ({ news: await db.all('SELECT id,title,category,summary,url,active,created_at FROM news_updates ORDER BY id DESC LIMIT 100') }));
+route('POST', '/api/admin/news/sync', { auth: true, roles: ['admin'] }, async () => {
+  try { return { ok: true, ...(await syncUpfNews()) }; }
+  catch (e) { throw { code: 502, msg: `Could not read the official UPF feed. ${clean(e.message,220)} Existing news is unchanged.` }; }
+});
+route('POST', '/api/admin/news', { auth: true, roles: ['admin'] }, async (ctx) => {
+  const title = clean(ctx.body.title, 180), category = clean(ctx.body.category, 60) || 'Community update', summary = clean(ctx.body.summary, 1600), url = clean(ctx.body.url, 500);
+  if (!title || !summary) throw { code: 400, msg: 'Enter a headline and a short update.' };
+  if (url && !/^https:\/\//i.test(url)) throw { code: 400, msg: 'Article links must use HTTPS.' };
+  const item = await db.run('INSERT INTO news_updates(title,category,summary,url,created_by,created_at) VALUES(?,?,?,?,?,?)', title, category, summary, url || null, ctx.user.id, now());
+  await audit(ctx.user.id, 'publish_news_update', `news:${item.insertId}`);
+  return { ok: true, id: item.insertId };
+});
+route('PATCH', '/api/admin/news/:id', { auth: true, roles: ['admin'] }, async (ctx) => {
+  const active = ctx.body.active ? 1 : 0;
+  await db.run('UPDATE news_updates SET active=? WHERE id=?', active, +ctx.params[0]);
+  await audit(ctx.user.id, active ? 'republish_news_update' : 'unpublish_news_update', `news:${+ctx.params[0]}`);
+  return { ok: true };
+});
+
+route('GET', '/api/admin/logins', { auth: true, roles: ['admin', 'commander'] }, async (ctx) => {
+  const rows = await db.all(`SELECT e.id,e.created_at,e.success,e.reason,e.kind,e.lat,e.lng,e.accuracy_m,e.outside_ug,e.dist_live,e.dist_id,e.dist_cross,e.liveness,e.ip,
+    CASE WHEN e.photo IS NULL THEN 0 ELSE 1 END AS has_photo,e.nin,u.full_name
+    FROM login_events e LEFT JOIN users u ON u.id=e.user_id WHERE (?='admin' OR u.station=?) ORDER BY e.id DESC LIMIT 300`, ctx.user.role, ctx.user.station || '');
+  return { logins: rows };
+});
+route('GET', '/api/admin/loginphoto/:id', { auth: true, roles: ['admin', 'commander'] }, async (ctx) => {
+  const e = await db.get('SELECT e.photo,u.station FROM login_events e LEFT JOIN users u ON u.id=e.user_id WHERE e.id=?', +ctx.params[0]); if (!e || !e.photo) throw { code: 404, msg: 'Not found' };
+  if(ctx.user.role!=='admin'&&e.station!==ctx.user.station) throw {code:403,msg:'This sign-in record belongs to another station.'};
+  await audit(ctx.user.id, 'view_login_photo', ctx.params[0]);
+  return { __raw: fs.readFileSync(path.join(UPLOADS, path.basename(e.photo))), __type: 'image/jpeg' };
+});
+
+// evidence download (police only)
+route('GET', '/api/evidence/:id', { auth: true }, async (ctx) => {
+  const e = await db.get('SELECT * FROM evidence WHERE id=?', +ctx.params[0]); if (!e) throw { code: 404, msg: 'Not found' };
+  const r = await db.get('SELECT r.ref,r.assigned_to,r.priority,st.name station_name FROM reports r LEFT JOIN stations st ON st.id=r.station_id WHERE r.id=?',e.report_id);
+  if (ctx.user.role === 'officer' && r.assigned_to !== ctx.user.id && (!ctx.user.station || r.station_name !== ctx.user.station) && !(await hasWorkedOnCase(ctx.user.id,r.id))) throw { code: 403, msg: 'This evidence belongs to another station.' };
+  if (ctx.user.role === 'commander' && r.station_name !== ctx.user.station) throw { code: 403, msg: 'This evidence belongs to another station.' };
+  if (ctx.user.role === 'cid' && !['urgent','high'].includes(r.priority)) throw { code: 403, msg: 'CID access is limited to high priority evidence.' };
+  const full = path.join(UPLOADS, path.basename(e.filename)); let bytes = fs.readFileSync(full);
+  if (e.filename.endsWith('.enc')) {
+    const secret = process.env.VIDEO_ENCRYPTION_KEY || ''; if (!/^(?:[a-f0-9]{64}|[A-F0-9]{64})$/.test(secret)) throw {code:503,msg:'Video decryption key is unavailable.'};
+    try { const dec = crypto.createDecipheriv('aes-256-gcm',Buffer.from(secret,'hex'),bytes.subarray(0,12)); dec.setAuthTag(bytes.subarray(12,28)); bytes = Buffer.concat([dec.update(bytes.subarray(28)),dec.final()]); }
+    catch { throw {code:500,msg:'Sensitive video could not be decrypted.'}; }
+    await audit(ctx.user.id,'view_sensitive_video',r.ref);
+  }
+  return { __raw: bytes, __type: e.mime };
+});
+
+// ---------- static files ----------
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.bin': 'application/octet-stream' };
+function serveStatic(req, res, pathname) {
+  let p = pathname === '/' ? '/index.html' : pathname;
+  const file = path.join(ROOT, 'public', path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
+  if (!file.startsWith(path.join(ROOT, 'public')) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end('Not found'); }
+  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', ...(p.startsWith('/vendor/') ? { 'Cache-Control': 'public, max-age=604800' } : {}) });
+  fs.createReadStream(file).pipe(res);
+}
+
+setInterval(() => { const t = Date.now(); for (const [k, v] of challenges) if (v.exp < t) challenges.delete(k); }, 60000).unref();
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://x');
+  if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, decodeURIComponent(url.pathname));
+  try {
+    const rt = routes.find(r => r.method === req.method && r.re.test(url.pathname));
+    if (!rt) return send(res, 404, { error: 'Not found' });
+    const ctx = { req, ip: req.socket.remoteAddress, query: Object.fromEntries(url.searchParams), params: url.pathname.match(rt.re).slice(1).map(decodeURIComponent), user: await authUser(req) };
+    if (rt.opts.auth && !ctx.user) return send(res, 401, { error: 'Please log in.' });
+    if (rt.opts.roles && !rt.opts.roles.includes(ctx.user.role)) return send(res, 403, { error: 'Not allowed for your role.' });
+    ctx.body = ['POST', 'PATCH'].includes(req.method) ? await readBody(req) : {};
+    const out = await rt.fn(ctx, req, res);
+    if (out && out.__raw !== undefined) return send(res, 200, out.__raw, { 'Content-Type': out.__type, ...(out.__headers || {}) });
+    const headers = out && out.__headers; if (out) delete out.__headers;
+    send(res, 200, out, headers || {});
+  } catch (e) {
+    if (e && e.code && e.msg) return send(res, e.code, { error: e.msg });
+    if (e && e.code === 413) return send(res, 413, { error: 'Upload too large.' });
+    if (e && e.code === 400) return send(res, 400, { error: e.message });
+    console.error(e); send(res, 500, { error: 'Server error' });
+  }
+});
+async function ensureCid() {
+  if (await db.get("SELECT id FROM users WHERE nin='CM00000000CD01'")) return;
+  await db.run('INSERT INTO users(username,full_name,role,station,password_hash,nin) VALUES(?,?,?,?,?,?)', 'cid1', 'D/Insp. Auma Brenda', 'cid', 'CID Headquarters, Kibuli', hashPw('Cid@12345'), 'CM00000000CD01');
+  console.log('Added demo CID account. Its name, badge and password are listed in README; replace before use.');
+}
+(async () => {
+  try {
+    db = await openDb(config.db);
+    await migrate();
+    await seed();
+    await ensureCid();
+    for (const u of await db.all("SELECT id FROM users WHERE badge_number IS NULL OR badge_number=''")) await db.run('UPDATE users SET badge_number=? WHERE id=?','BP-'+String(u.id).padStart(5,'0'),u.id);
+    for (const x of await db.all('SELECT id,lat,lng,district,area FROM reports WHERE station_id IS NULL')) { const p = await pickStation(x.lat, x.lng, x.district,x.area); if (p) { await db.run('UPDATE reports SET station_id=?,station_at=? WHERE id=?', p.st.id, now(), x.id); await db.run('INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)',x.id,'police',`Your report was forwarded to ${p.st.name} Police Station (${p.st.area}).`); } }
+    server.listen(PORT, () => { console.log(`SafeReport UG running on http://localhost:${PORT}  (database: ${db.kind}${db.kind === 'mysql' ? ' ' + config.db.name : ''})`); scheduleUpfNewsSync(true); setInterval(() => scheduleUpfNewsSync(true), 30 * 60 * 1000).unref(); });
+  } catch (e) {
+    console.error('\nCould not start: ' + e.message + '\n');
+    process.exit(1);
+  }
+})();
