@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS news_updates (
   category TEXT NOT NULL DEFAULT 'Community update',
   summary TEXT NOT NULL,
   url TEXT,
+  image_url TEXT,
   active INTEGER NOT NULL DEFAULT 1,
   created_by INTEGER REFERENCES users(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))

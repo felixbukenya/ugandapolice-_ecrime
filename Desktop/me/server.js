@@ -119,22 +119,25 @@ async function migrate() {
   if (my) { try { await db.run("ALTER TABLE users MODIFY role ENUM('officer','cid','commander','admin') NOT NULL"); } catch (e) { console.error('role enum:', e.message); } }
   await db.run(`CREATE TABLE IF NOT EXISTS stations (id ${my ? 'INT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, name VARCHAR(100) NOT NULL, area VARCHAR(100), district VARCHAR(60), lat REAL, lng REAL, radius_km REAL DEFAULT 5, phone VARCHAR(30), active INTEGER DEFAULT 1, created_by INTEGER, created_at VARCHAR(19) NOT NULL)`);
   try { await db.run('ALTER TABLE stations ADD COLUMN area VARCHAR(100)'); } catch (e) { if (!/duplicate/i.test(String(e.message))) throw e; }
-  if (!(await db.get('SELECT id FROM stations LIMIT 1'))) for (const [n, a, d, la, ln] of [['Kampala Central', 'Central Division', 'Kampala', 0.3136, 32.5811], ['Entebbe', 'Entebbe Municipality', 'Wakiso', 0.0512, 32.4637], ['Jinja', 'Jinja Central', 'Jinja', 0.4244, 33.2041], ['Mukono Central', 'Mukono Municipality', 'Mukono', 0.3533, 32.7553]]) await db.run('INSERT INTO stations(name,area,district,lat,lng,radius_km,created_at) VALUES(?,?,?,?,?,?,?)', n, a, d, la, ln, 8, now());
+  if (!(await db.get('SELECT id FROM stations WHERE active=1 LIMIT 1'))) for (const [n, a, d, la, ln] of [['Kampala Central', 'Central Division', 'Kampala', 0.3136, 32.5811], ['Entebbe', 'Entebbe Municipality', 'Wakiso', 0.0512, 32.4637], ['Jinja', 'Jinja Central', 'Jinja', 0.4244, 33.2041], ['Mukono Central', 'Mukono Municipality', 'Mukono', 0.3533, 32.7553]]) await db.run('INSERT INTO stations(name,area,district,lat,lng,radius_km,created_at) VALUES(?,?,?,?,?,?,?)', n, a, d, la, ln, 8, now());
   await db.run(`CREATE TABLE IF NOT EXISTS sms_outbox (id ${my ? 'INT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, report_id INTEGER, to_phone VARCHAR(20) NOT NULL, body TEXT NOT NULL, created_at VARCHAR(19) NOT NULL)`);
   await db.run(`CREATE TABLE IF NOT EXISTS case_assignments (id ${my ? 'INT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, report_id INTEGER NOT NULL, user_id INTEGER NOT NULL, assigned_by INTEGER, assigned_at VARCHAR(19) NOT NULL)`);
-  await db.run(`CREATE TABLE IF NOT EXISTS news_updates (id ${my ? 'INT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, title VARCHAR(180) NOT NULL, category VARCHAR(60) NOT NULL DEFAULT 'Community update', summary TEXT NOT NULL, url VARCHAR(500), active INTEGER NOT NULL DEFAULT 1, created_by INTEGER, created_at VARCHAR(19) NOT NULL)`);
+  await db.run(`CREATE TABLE IF NOT EXISTS news_updates (id ${my ? 'INT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'}, title VARCHAR(180) NOT NULL, category VARCHAR(60) NOT NULL DEFAULT 'Community update', summary TEXT NOT NULL, url VARCHAR(500), image_url VARCHAR(500), active INTEGER NOT NULL DEFAULT 1, created_by INTEGER, created_at VARCHAR(19) NOT NULL)`);
+  try { await db.run('ALTER TABLE news_updates ADD COLUMN image_url VARCHAR(500)'); } catch (e) { if (!/duplicate/i.test(String(e.message))) throw e; }
 }
 const km = (a, b, c, d) => { const r = x => x * Math.PI / 180, h = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
 const areaKey = s => String(s || '').toLowerCase().replace(/\b(district|division|municipality|county|subcounty)\b/g,'').replace(/[^a-z0-9]/g,'');
 // Case routing follows the station's declared local area and district, never a distance radius.
-async function pickStation(_lat, _lng, district, area = '') {
+async function pickStation(lat, lng, district, area = '') {
   const all = await db.all('SELECT * FROM stations WHERE active=1');
   const sameDistrict = all.filter(s => areaKey(s.district) && areaKey(s.district) === areaKey(district));
-  if (!sameDistrict.length) return null;
   const exactArea = areaKey(area) ? sameDistrict.find(s => areaKey(s.area) === areaKey(area)) : null;
   if (exactArea) return { st: exactArea, how: 'area' };
-  const general = sameDistrict.find(s => !areaKey(s.area));
-  return general ? { st: general, how: 'district' } : (sameDistrict.length === 1 ? { st: sameDistrict[0], how: 'district' } : null);
+  const haversine = (a,b,c,d) => { const r=x=>x*Math.PI/180,h=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return 12742*Math.asin(Math.sqrt(h)); };
+  const nearest = rows => rows.filter(s=>s.lat!==null&&s.lat!==undefined&&s.lng!==null&&s.lng!==undefined&&Number.isFinite(+s.lat)&&Number.isFinite(+s.lng)).sort((a,b)=>haversine(lat,lng,+a.lat,+a.lng)-haversine(lat,lng,+b.lat,+b.lng))[0];
+  if (sameDistrict.length) return { st: nearest(sameDistrict) || sameDistrict.find(s=>!areaKey(s.area)) || sameDistrict[0], how: 'district' };
+  const closest = nearest(all);
+  return closest ? { st: closest, how: 'nearest' } : (all.length===1 ? {st:all[0],how:'single'} : null);
 }
 async function hasWorkedOnCase(userId, reportId) {
   return !!(await db.get('SELECT 1 AS x FROM case_assignments WHERE report_id=? AND user_id=? LIMIT 1',reportId,userId)
@@ -145,7 +148,7 @@ const phoneKey = p => String(p || '').replace(/\D/g, '').slice(-9);
 async function sms(reportId, phone, body) { if (phoneKey(phone).length === 9) await db.run('INSERT INTO sms_outbox(report_id,to_phone,body,created_at) VALUES(?,?,?,?)', reportId, phoneKey(phone), body, now()); }
 
 // Import only public article metadata from the official UPF WordPress feed.
-const UPF_NEWS_FEED = process.env.UPF_NEWS_FEED_URL || 'https://upf.go.ug/feed/';
+const UPF_NEWS_FEEDS = process.env.UPF_NEWS_FEED_URL ? [process.env.UPF_NEWS_FEED_URL] : ['https://upf.go.ug/wp-json/wp/v2/posts?_embed&per_page=15','https://upf.go.ug/feed/'];
 let upfSyncInFlight = null, upfLastSyncAt = null, upfLastSyncError = null, upfLastAttemptAt = 0;
 function xmlValue(item, tag) { const m = item.match(new RegExp('<' + tag + '(?:\\s[^>]*)?>([\\s\\S]*?)<\\/' + tag + '>', 'i')); return m ? m[1] : ''; }
 function plainFeedText(value, max = 1600) {
@@ -154,12 +157,13 @@ function plainFeedText(value, max = 1600) {
 function parseUpfFeed(payload, contentType) {
   if (contentType.includes('json') || /^[\s]*\[/.test(payload)) {
     const rows = JSON.parse(payload);
-    return (Array.isArray(rows) ? rows : rows.items || []).slice(0,15).map(x => ({ title: plainFeedText(x.title?.rendered || x.title,180), summary: plainFeedText(x.excerpt?.rendered || x.summary || x.description,1600), url: String(x.link || x.url || ''), category: 'Latest news', date: x.date })).filter(x=>x.title&&x.url);
+    return (Array.isArray(rows) ? rows : rows.items || []).slice(0,15).map(x => ({ title: plainFeedText(x.title?.rendered || x.title,180), summary: plainFeedText(x.excerpt?.rendered || x.summary || x.description,1600), url: String(x.link || x.url || ''), image_url: String(x._embedded?.['wp:featuredmedia']?.[0]?.source_url || x.featured_media_url || x.image_url || ''), category: x._embedded?.['wp:term']?.[0]?.[0]?.name || x.category_name || 'Latest news', date: x.date })).filter(x=>x.title&&x.url);
   }
   const rows = [...payload.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi)].slice(0,15).map(([,item]) => ({
     title: plainFeedText(xmlValue(item,'title'),180),
     summary: plainFeedText(xmlValue(item,'description') || xmlValue(item,'content:encoded') || xmlValue(item,'content'),1600),
     url: plainFeedText(xmlValue(item,'link'),500),
+    image_url: plainFeedText((item.match(/<(?:media:content|media:thumbnail|enclosure)\b[^>]*\burl=["']([^"']+)["']/i)||[])[1] || (item.match(/<img\b[^>]*\bsrc=["']([^"']+)["']/i)||[])[1] || '',500),
     category: plainFeedText(xmlValue(item,'category'),60) || 'Latest news',
     date: plainFeedText(xmlValue(item,'pubDate') || xmlValue(item,'dc:date'),80)
   }));
@@ -169,22 +173,28 @@ async function syncUpfNews() {
   if (upfSyncInFlight) return upfSyncInFlight;
   upfLastAttemptAt = Date.now();
   upfSyncInFlight = (async () => {
-    const feedUrl = new URL(UPF_NEWS_FEED);
-    const upfHosts = ['upf.go.ug','www.upf.go.ug'];
-    if (feedUrl.protocol !== 'https:' || !upfHosts.includes(feedUrl.hostname)) throw new Error('News feed must use HTTPS on the official upf.go.ug site.');
-    const response = await fetch(feedUrl, { headers: { 'Accept': 'application/rss+xml, application/atom+xml, application/json, application/xml, text/xml', 'User-Agent': 'SafeReportUG-NewsReader/1.0' }, signal: AbortSignal.timeout(10000) });
-    if (!response.ok || (response.url && !upfHosts.includes(new URL(response.url).hostname))) throw new Error(`UPF news feed returned HTTP ${response.status}.`);
-    const payload = await response.text();
-    if (payload.length > 3_000_000) throw new Error('UPF news feed is larger than expected.');
-    const items = parseUpfFeed(payload, response.headers.get('content-type') || ''); if (!items.length) throw new Error('The feed did not contain readable articles.'); let imported = 0;
+    const upfHosts = ['upf.go.ug','www.upf.go.ug']; let items=[], feedError='No feed returned readable articles.';
+    for (const source of UPF_NEWS_FEEDS) {
+      try {
+        const feedUrl=new URL(source);if(feedUrl.protocol!=='https:'||!upfHosts.includes(feedUrl.hostname))throw new Error('Feed must use HTTPS on the official upf.go.ug site.');
+        const response=await fetch(feedUrl,{headers:{'Accept':'application/rss+xml, application/atom+xml, application/json, application/xml, text/xml','User-Agent':'SafeReportUG-NewsReader/1.0'},signal:AbortSignal.timeout(10000)});
+        if(!response.ok||(response.url&&!upfHosts.includes(new URL(response.url).hostname)))throw new Error(`UPF news feed returned HTTP ${response.status}.`);
+        const payload=await response.text();if(payload.length>3_000_000)throw new Error('UPF news feed is larger than expected.');
+        items=parseUpfFeed(payload,response.headers.get('content-type')||'');if(!items.length)throw new Error('The feed did not contain readable articles.');break;
+      } catch(e){feedError=e.message;}
+    }
+    if(!items.length)throw new Error(feedError);let imported = 0;
     for (const item of items) {
       let articleUrl; try { articleUrl = new URL(item.url); } catch { continue; }
       if (articleUrl.protocol !== 'https:' || !upfHosts.includes(articleUrl.hostname)) continue;
-      if (await db.get('SELECT id FROM news_updates WHERE url=? LIMIT 1', articleUrl.href)) continue;
+      let imageUrl = null;
+      try { const candidate = new URL(item.image_url, articleUrl); if(candidate.protocol==='https:'&&upfHosts.includes(candidate.hostname)) imageUrl=candidate.href; } catch {}
+      const exists = await db.get('SELECT id,image_url FROM news_updates WHERE url=? LIMIT 1', articleUrl.href);
+      if (exists) { if(imageUrl&&!exists.image_url) await db.run('UPDATE news_updates SET image_url=? WHERE id=?',imageUrl,exists.id); continue; }
       const parsedDate = item.date ? new Date(item.date) : new Date();
       const created = Number.isNaN(+parsedDate) ? now() : parsedDate.toISOString().slice(0,19).replace('T',' ');
       const category = clean(`UPF · ${item.category}`,60) || 'UPF · Latest news';
-      await db.run('INSERT INTO news_updates(title,category,summary,url,created_at) VALUES(?,?,?,?,?)', clean(item.title,180), category, clean(item.summary,1600) || 'Open the official Uganda Police Force article to read the update.', articleUrl.href, created);
+      await db.run('INSERT INTO news_updates(title,category,summary,url,image_url,created_at) VALUES(?,?,?,?,?,?)', clean(item.title,180), category, clean(item.summary,1600) || 'Open the official Uganda Police Force article to read the update.', articleUrl.href, imageUrl, created);
       imported++;
     }
     upfLastSyncAt = now(); upfLastSyncError = null;
@@ -238,7 +248,7 @@ route('GET', '/api/public/stats', {}, async () => ({
 route('GET', '/api/public/news', {}, async (ctx) => {
   scheduleUpfNewsSync();
   const after = Math.max(0, Number(ctx.query.after) || 0);
-  return { news: await db.all('SELECT id,title,category,summary,url,created_at FROM news_updates WHERE active=1 AND id>? ORDER BY id DESC LIMIT 12', after), source: { name: 'Uganda Police Force', url: 'https://upf.go.ug/', last_checked: upfLastSyncAt, syncing: !!upfSyncInFlight, error: upfLastSyncError } };
+  return { news: await db.all('SELECT id,title,category,summary,url,image_url,created_at FROM news_updates WHERE active=1 AND id>? ORDER BY created_at DESC,id DESC LIMIT 12', after), source: { name: 'Uganda Police Force', url: 'https://upf.go.ug/', last_checked: upfLastSyncAt, syncing: !!upfSyncInFlight, error: upfLastSyncError } };
 });
 route('GET', '/api/public/stations', {}, async () => ({ stations: await db.all('SELECT id,name,area,district,lat,lng,phone FROM stations WHERE active=1 ORDER BY district,name') }));
 route('GET', '/api/location/reverse', {}, async (ctx) => {
@@ -258,14 +268,28 @@ route('GET', '/api/location/reverse', {}, async (ctx) => {
     return {area,district,formatted_address:data.results[0].formatted_address||'',map_url,key_required:false};
   } catch { return {area:null,district:null,formatted_address:'',map_url,key_required:false}; }
 });
+route('GET', '/api/location/search', {}, async (ctx) => {
+  if(limited(ctx.ip,'forward_geocode',20,600000)) throw {code:429,msg:'Place searches are temporarily limited. Try again shortly.'};
+  const query=clean(ctx.query.q,180),key=process.env.GOOGLE_MAPS_API_KEY;
+  if(query.length<3) throw {code:400,msg:'Enter a town, street, or nearby landmark.'};
+  if(!key) throw {code:503,msg:'Searching for a different incident location needs Google Maps lookup enabled by the app administrator. If possible, open the app where the incident happened and use your current location.'};
+  try {
+    const u=new URL('https://maps.googleapis.com/maps/api/geocode/json');u.searchParams.set('address',query);u.searchParams.set('components','country:UG');u.searchParams.set('key',key);
+    const response=await fetch(u,{signal:AbortSignal.timeout(8000)}),data=await response.json();
+    if(!response.ok||data.status!=='OK'||!data.results?.length) throw new Error('No matching place was found in Uganda. Try a nearby town or landmark.');
+    const result=data.results[0],components=result.address_components||[],get=type=>components.find(c=>c.types.includes(type))?.long_name||'';
+    const candidates=[get('administrative_area_level_2'),get('locality'),get('administrative_area_level_3')],district=candidates.map(x=>DISTRICTS.find(d=>areaKey(d)===areaKey(x))).find(Boolean)||'';
+    return {lat:result.geometry.location.lat,lng:result.geometry.location.lng,district,area:get('sublocality_level_1')||get('sublocality')||get('neighborhood')||get('administrative_area_level_3')||get('locality'),place:result.formatted_address||query,map_url:`https://www.google.com/maps/search/?api=1&query=${result.geometry.location.lat},${result.geometry.location.lng}`};
+  } catch(e) { if(e.message?.startsWith('No matching'))throw {code:404,msg:e.message}; throw {code:503,msg:'Could not search for that place right now. Try again or report from the incident location.'}; }
+});
 
 route('POST', '/api/reports', {}, async (ctx) => {
   if (limited(ctx.ip, 'submit', 10, 3600000)) throw { code: 429, msg: 'Too many reports from this device. Try again later.' };
   const b = ctx.body;
   const category = clean(b.category, 40); let description = clean(b.description, 4000);
-  const district = clean(b.district, 40), area = clean(b.area,100), place = clean(b.place, 120);
+  let district = clean(b.district, 40); const area = clean(b.area,100), place = clean(b.place, 120);
   if (!CATEGORIES.includes(category)) throw { code: 400, msg: 'Choose what happened.' };
-  if (!DISTRICTS.includes(district)) throw { code: 400, msg: 'Choose a district.' };
+  if (district && !DISTRICTS.includes(district)) throw { code: 400, msg: 'The detected district could not be verified. Refresh the location and try again.' };
   const occurred = clean(b.occurred_at, 20).replace('T', ' ');
   if (!/^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(occurred)) throw { code: 400, msg: 'Enter when it happened.' };
   if (new Date(occurred.replace(' ', 'T')) > new Date(Date.now() + 3600000)) throw { code: 400, msg: 'Date cannot be in the future.' };
@@ -275,6 +299,8 @@ route('POST', '/api/reports', {}, async (ctx) => {
   const lat = Number.isFinite(+b.lat) && b.lat !== null && b.lat !== '' ? +b.lat : null;
   const lng = Number.isFinite(+b.lng) && b.lng !== null && b.lng !== '' ? +b.lng : null;
   if(lat===null||lng===null||Math.abs(lat)>90||Math.abs(lng)>180) throw {code:400,msg:'Share your current GPS location so the report can be routed to the right area.'};
+  const pick = await pickStation(lat,lng,district,area);
+  if (!district) district = pick?.st.district || 'Unknown';
   const files = Array.isArray(b.evidence) ? b.evidence.slice(0, 5) : [];
   for (const f of files) {
     if (!/^(image\/(jpeg|png|webp)|video\/mp4)$/.test(f.mime || '')) throw { code: 400, msg: 'Only JPG, PNG, WEBP or MP4 evidence is allowed.' };
@@ -308,9 +334,8 @@ route('POST', '/api/reports', {}, async (ctx) => {
     await db.run('INSERT INTO evidence(report_id,filename,mime) VALUES(?,?,?)', id, stored, audio.mime);
   }
   rag.summarise(description + ' ' + transcript, analysis).then(t => t && db.run('UPDATE reports SET rag_json=? WHERE id=?', JSON.stringify({ ...analysis, summary: t }), id)).catch(() => {});
-  const pick = await pickStation(lat, lng, district, area);
   if (pick) await db.run('UPDATE reports SET station_id=?,station_at=? WHERE id=?', pick.st.id, now(), id);
-  const dispatchNotice=pick ? `Your report was forwarded to ${pick.st.name} Police Station (${pick.st.area || pick.st.district}).` : `Your report is in the central police queue because no station is registered for ${area || district}.`;
+  const dispatchNotice=pick ? `Your report was forwarded to ${pick.st.name} Police Station${pick.how==='nearest'?' based on your location':''}.` : `Your report is in the central police queue while a station is identified for this location.`;
   await db.run("INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)",id,'police',dispatchNotice);
   if (!anonymous) await sms(id, phone, `Uganda Police: report ${ref} received${pick ? ' and sent to ' + pick.st.name + ' Police Station' : ''}. Tracking PIN ${pin}. Priority: ${priority}.`);
   return { ref, pin, priority, station: pick ? pick.st.name : null, emergency: analysis.emergency, advice: analysis.advice, laws: analysis.laws.slice(0, 3).map(l => ({ source: l.source, ref: l.ref })), ask: analysis.incidents.flatMap(i => i.ask).slice(0, 4) };
@@ -735,16 +760,17 @@ route('PATCH', '/api/admin/users/:id', { auth: true, roles: ['admin','commander'
   return { ok: true };
 });
 route('GET', '/api/admin/audit', { auth: true, roles: ['admin'] }, async () => ({ log: await db.all('SELECT a.created_at,a.action,a.detail,u.username FROM audit_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.id DESC LIMIT 200') }));
-route('GET', '/api/admin/news', { auth: true, roles: ['admin'] }, async () => ({ news: await db.all('SELECT id,title,category,summary,url,active,created_at FROM news_updates ORDER BY id DESC LIMIT 100') }));
+route('GET', '/api/admin/news', { auth: true, roles: ['admin'] }, async () => ({ news: await db.all('SELECT id,title,category,summary,url,image_url,active,created_at FROM news_updates ORDER BY id DESC LIMIT 100') }));
 route('POST', '/api/admin/news/sync', { auth: true, roles: ['admin'] }, async () => {
   try { return { ok: true, ...(await syncUpfNews()) }; }
   catch (e) { throw { code: 502, msg: `Could not read the official UPF feed. ${clean(e.message,220)} Existing news is unchanged.` }; }
 });
 route('POST', '/api/admin/news', { auth: true, roles: ['admin'] }, async (ctx) => {
-  const title = clean(ctx.body.title, 180), category = clean(ctx.body.category, 60) || 'Community update', summary = clean(ctx.body.summary, 1600), url = clean(ctx.body.url, 500);
+  const title = clean(ctx.body.title, 180), category = clean(ctx.body.category, 60) || 'Community update', summary = clean(ctx.body.summary, 1600), url = clean(ctx.body.url, 500), image = clean(ctx.body.image_url,500);
   if (!title || !summary) throw { code: 400, msg: 'Enter a headline and a short update.' };
   if (url && !/^https:\/\//i.test(url)) throw { code: 400, msg: 'Article links must use HTTPS.' };
-  const item = await db.run('INSERT INTO news_updates(title,category,summary,url,created_by,created_at) VALUES(?,?,?,?,?,?)', title, category, summary, url || null, ctx.user.id, now());
+  if (image) { let host=''; try{const parsed=new URL(image);if(parsed.protocol==='https:')host=parsed.hostname;}catch{} if(!['upf.go.ug','www.upf.go.ug'].includes(host)) throw { code: 400, msg: 'Images must be hosted on the official UPF website.' }; }
+  const item = await db.run('INSERT INTO news_updates(title,category,summary,url,image_url,created_by,created_at) VALUES(?,?,?,?,?,?,?)', title, category, summary, url || null, image || null, ctx.user.id, now());
   await audit(ctx.user.id, 'publish_news_update', `news:${item.insertId}`);
   return { ok: true, id: item.insertId };
 });
@@ -830,7 +856,7 @@ async function ensureCid() {
     await seed();
     await ensureCid();
     for (const u of await db.all("SELECT id FROM users WHERE badge_number IS NULL OR badge_number=''")) await db.run('UPDATE users SET badge_number=? WHERE id=?','BP-'+String(u.id).padStart(5,'0'),u.id);
-    for (const x of await db.all('SELECT id,lat,lng,district,area FROM reports WHERE station_id IS NULL')) { const p = await pickStation(x.lat, x.lng, x.district,x.area); if (p) { await db.run('UPDATE reports SET station_id=?,station_at=? WHERE id=?', p.st.id, now(), x.id); await db.run('INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)',x.id,'police',`Your report was forwarded to ${p.st.name} Police Station (${p.st.area}).`); } }
+    for (const x of await db.all('SELECT id,lat,lng,district,area FROM reports WHERE station_id IS NULL')) { const p = await pickStation(x.lat, x.lng, x.district,x.area); if (p) { await db.run('UPDATE reports SET station_id=?,station_at=? WHERE id=?', p.st.id, now(), x.id); const msg=`Your report was forwarded to ${p.st.name} Police Station.`;const updated=await db.run("UPDATE messages SET body=? WHERE report_id=? AND sender='police' AND body LIKE 'Your report is in the central police queue%'",msg,x.id);if(!updated.changes)await db.run('INSERT INTO messages(report_id,sender,body) VALUES(?,?,?)',x.id,'police',msg); } }
     server.listen(PORT, () => { console.log(`SafeReport UG running on http://localhost:${PORT}  (database: ${db.kind}${db.kind === 'mysql' ? ' ' + config.db.name : ''})`); scheduleUpfNewsSync(true); setInterval(() => scheduleUpfNewsSync(true), 30 * 60 * 1000).unref(); });
   } catch (e) {
     console.error('\nCould not start: ' + e.message + '\n');

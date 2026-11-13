@@ -3,7 +3,7 @@
 Built from the "SafeReport UG" prototype video and extended into a working full-stack system.
 
 ## Current update
-- Public and police screens use the Uganda Police-inspired white, blue and gold palette.
+- Every screen uses the Uganda Police-inspired white-and-blue theme, including the demo SMS inbox.
 - Police sign-in now requires the registered full name, badge number and password/PIN. Existing users receive a generated `BP-00001`-style badge on upgrade.
 - A station commander acts as the station administrator: they can view, register, edit, deactivate and reactivate officers at their own station. System administrators can manage all stations.
 - Statement audio supports start, pause, resume, stop, timer, playback and re-recording. The speech transcript is editable and must be reviewed before submission. Audio is police-authenticated and is encrypted at rest when `VIDEO_ENCRYPTION_KEY` is configured.
@@ -60,7 +60,7 @@ Demo police accounts (**change before real use**). Sign in with the registered n
 The badges and credentials are placeholders. Register real officers in **Police > Station officers** with their badge, name, NIN and an individual strong PIN/password.
 
 ## What changed in this version
-- **Application interface uses a consistent white-and-blue theme** across public reporting, tracking, police tools, header/navigation, notices and the demo inbox. The visible build label is v2.7.
+- **Application interface uses a consistent white-and-blue theme** across public reporting, tracking, police tools, header/navigation, notices and the demo inbox. The visible build label is v2.8.
 - **Statistics are readable** (the bar charts had a duplicate CSS rule).
 - **Hotspot map is navigable**: drag to move, scroll/pinch/double-click or +/- to zoom, tap a dot to see the case and open it. Street tiles need internet; dots show without it (`public/pmap.js`).
 - **New role: CID** (Criminal Investigations). Add it under Police > Users. Old databases are upgraded automatically.
@@ -150,3 +150,9 @@ anonymous option; reference number (UG-xxxx); 4-step tracking timeline; police d
 - Reporters see a confirmation popup when a report is submitted. It names the receiving station or central queue but does not expose the secret reference/PIN in a browser notification.
 - Anyone may opt in to browser alerts on that device. While the SafeReport page is open, it checks for newly published notices every minute, displays a popup and (if browser permission was granted) an OS notification. The latest notices remain visible to everyone on the home page.
 - The app does not collect contact details for public news alerts. Closed-browser/background delivery needs a configured web-push service or an SMS/email provider; the current prototype polls only while the app is open. Report confirmation SMS remains in the demo inbox until a real SMS gateway is configured.
+
+## New in 2.8: UPF image carousel and simpler location
+- News cards now slide one at a time in a responsive flex carousel, with pictures linked directly from UPF's site. Slides change every five seconds and fade over half a second. The same UPF images appear softly behind the home screen. The app stores image URLs and does not download or copy these pictures; the hosting browser must be able to load `upf.go.ug` images.
+- UPF news sync tries the public WordPress posts JSON endpoint with featured images first, then RSS. It runs at startup and every 30 minutes. Use `UPF_NEWS_FEED_URL` to select a public HTTPS RSS or WordPress JSON feed if UPF changes its endpoint.
+- Online reports use the phone's GPS by default and hide district/area/place fields. If the incident happened elsewhere, the reporter can search one town/street/landmark field; that search needs `GOOGLE_MAPS_API_KEY`. Routing first checks a matching station service area, then finds the closest registered station from its map coordinates. Unassigned cases with a known location are forwarded during startup when a station is available.
+- Speech recognition offers several local-language choices, including Luganda, Kiswahili, Runyankole, Rukiga, Lusoga, Acholi, Ateso and Lugbara. The browser decides which languages it supports. Some browsers send speech to their own online recognition service, so the consent screen explains this. If a language or browser is unsupported, the audio still records and the statement can be typed. Universal transcription in every language requires a separate speech service and explicit deployment/privacy configuration.

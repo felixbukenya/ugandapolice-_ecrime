@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS `news_updates` (
   `category` VARCHAR(60) NOT NULL DEFAULT 'Community update',
   `summary` TEXT NOT NULL,
   `url` VARCHAR(500) NULL,
+  `image_url` VARCHAR(500) NULL,
   `active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_by` INT UNSIGNED NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
