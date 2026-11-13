@@ -741,7 +741,8 @@ route('POST', '/api/admin/users', { auth: true, roles: ['admin','commander'] }, 
   if (!/^[A-Z0-9-]{3,32}$/.test(badge)) throw { code: 400, msg: 'Badge number must be 3-32 letters or numbers.' };
   const station = ctx.user.role === 'admin' ? clean(b.station,80) : ctx.user.station;
   const role = ctx.user.role === 'admin' ? b.role : 'officer';
-  if (!station) throw { code: 400, msg: 'Set your station before managing officers.' };
+  if (!station) throw { code: 400, msg: 'Choose a registered station before managing officers.' };
+  if (!(await db.get('SELECT id FROM stations WHERE active=1 AND name=?', station))) throw { code: 400, msg: 'Choose a currently registered station from the station list.' };
   if (await db.get('SELECT 1 AS x FROM users WHERE username=? OR nin=? OR UPPER(badge_number)=?', username, nin, badge)) throw { code: 409, msg: 'Username, National ID, or badge already exists.' };
   await db.run('INSERT INTO users(username,full_name,role,station,password_hash,nin,badge_number) VALUES(?,?,?,?,?,?,?)', username, clean(b.full_name, 80), role, station, hashPw(pw), nin, badge);
   await audit(ctx.user.id, 'create_user', username);

@@ -1,6 +1,6 @@
 # SafeReport UG: Uganda Police e-Crime Reporting System
 
-Built from the "SafeReport UG" prototype video and extended into a working full-stack system.
+A full-stack Uganda Police e-Crime reporting and case-management application.
 
 ## Current update
 - Every screen uses the Uganda Police-inspired white-and-blue theme, including the demo SMS inbox.
@@ -14,6 +14,10 @@ Built from the "SafeReport UG" prototype video and extended into a working full-
 Use HTTPS for operational use. Camera and microphone access requires HTTPS or localhost. A badge is an identifier, not a secret; use a strong PIN/password and change all demo credentials.
 
 To configure the sensitive-video key in PowerShell before starting the server, generate and store a secure 32-byte key in your organisation's secret manager, then set `$env:VIDEO_ENCRYPTION_KEY="<64 hex characters>"`. Keep the same key for as long as those encrypted recordings must remain accessible. Do not commit it to source control or send it with the project ZIP.
+
+## Presentation documents
+- `docs/SafeReport-UG-Project-Guide.pdf` explains the user journeys, police workflow, architecture, demo sequence, and deployment checks.
+- `docs/SafeReport-UG-ERD.pdf` shows the database entities and their relationships.
 
 ## Quick start (read this first)
 The pages only work **through the server**. Opening `index.html` or `phone.html` directly from the file manager shows empty pages (no categories, no inbox).
@@ -60,7 +64,7 @@ Demo police accounts (**change before real use**). Sign in with the registered n
 The badges and credentials are placeholders. Register real officers in **Police > Station officers** with their badge, name, NIN and an individual strong PIN/password.
 
 ## What changed in this version
-- **Application interface uses a consistent white-and-blue theme** across public reporting, tracking, police tools, header/navigation, notices and the demo inbox. The visible build label is v2.8.
+- **Application interface uses a consistent white-and-blue theme** across public reporting, tracking, police tools, header/navigation, notices and the demo inbox. The application carries final-release branding.
 - **Statistics are readable** (the bar charts had a duplicate CSS rule).
 - **Hotspot map is navigable**: drag to move, scroll/pinch/double-click or +/- to zoom, tap a dot to see the case and open it. Street tiles need internet; dots show without it (`public/pmap.js`).
 - **New role: CID** (Criminal Investigations). Add it under Police > Users. Old databases are upgraded automatically.
@@ -149,7 +153,7 @@ anonymous option; reference number (UG-xxxx); 4-step tracking timeline; police d
 - If UPF changes or disables its default RSS feed, an administrator can set `UPF_NEWS_FEED_URL` to another public HTTPS RSS or WordPress posts JSON feed hosted on `upf.go.ug` (or `www.upf.go.ug`), then restart the app. Manual public updates remain available if the official feed cannot be reached; existing imported stories stay visible.
 - Reporters see a confirmation popup when a report is submitted. It names the receiving station or central queue but does not expose the secret reference/PIN in a browser notification.
 - Anyone may opt in to browser alerts on that device. While the SafeReport page is open, it checks for newly published notices every minute, displays a popup and (if browser permission was granted) an OS notification. The latest notices remain visible to everyone on the home page.
-- The app does not collect contact details for public news alerts. Closed-browser/background delivery needs a configured web-push service or an SMS/email provider; the current prototype polls only while the app is open. Report confirmation SMS remains in the demo inbox until a real SMS gateway is configured.
+- The app does not collect contact details for public news alerts. Closed-browser/background delivery needs a configured web-push service or an SMS/email provider; the current implementation polls only while the app is open. Report confirmation SMS remains in the demo inbox until a real SMS gateway is configured.
 
 ## New in 2.8: UPF image carousel and simpler location
 - News cards now slide one at a time in a responsive flex carousel, with pictures linked directly from UPF's site. Slides change every five seconds and fade over half a second. The same UPF images appear softly behind the home screen. The app stores image URLs and does not download or copy these pictures; the hosting browser must be able to load `upf.go.ug` images.

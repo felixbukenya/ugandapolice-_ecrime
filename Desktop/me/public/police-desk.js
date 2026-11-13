@@ -39,7 +39,7 @@ function receiptHtml(x) {
     <div class="row2"><span>Recorded</span><b>${esc(fmt(x.created_at || new Date().toISOString().slice(0, 19)))}</b></div>
     ${x.officer ? `<div class="row2"><span>Received by</span><b>${esc(x.officer)}</b></div>` : ''}
     <div style="margin-top:8px">${qr}</div><div class="small">Scan to track your case, then enter your PIN.<br>${esc(trackUrl(x.ref))}</div>
-    <hr><div class="small">Keep this slip. Quote the case number when you contact police. Emergency: 999 or 112.<br>Prototype slip, not an official Uganda Police form.</div></div>`;
+    <hr><div class="small">Keep this slip. Quote the case number when you contact police. Emergency: 999 or 112.<br>System-generated receipt. Keep it secure and quote the case number when contacting police.</div></div>`;
 }
 
 /* ---------- signed statement (printable) ---------- */
@@ -58,7 +58,7 @@ async function statementHtml(r, evidence) {
   <p>This statement was read back to the complainant in ${esc(w.language || 'English')}, who confirmed that it is correct and true to the best of their knowledge. Knowingly giving false information to the police is an offence.${w.pf3_issued ? ' A PF3 medical form was issued.' : ''}</p>
   <table><tr><th>Complainant ${w.sign_mode === 'thumbprint' ? '(thumbprint on this paper copy)' : '(signature)'}</th><td style="height:80px">${sigImg ? `<img src="${sigImg}" style="max-height:70px;max-width:100%">` : ''}</td></tr>
   <tr><th>Recording officer</th><td style="height:50px">${esc(r.received_by_name || '')}</td></tr></table>
-  <div class="small">Prototype printout, not an official Uganda Police form. Printed ${esc(fmt(new Date().toISOString().slice(0, 19)))}.</div>`;
+  <div class="small">System-generated copy. Printed ${esc(fmt(new Date().toISOString().slice(0, 19)))}.</div>`;
 }
 
 /* ---------- case modal helpers (called from openCase in index.html) ---------- */
@@ -356,5 +356,5 @@ function printOB() {
   const rows = [...d.entries].reverse();
   printDoc(`${PRINT_CSS}<h1>UGANDA POLICE FORCE · OCCURRENCE BOOK</h1><h2>${esc(rows[0].station)}${OBF.date ? ' · ' + esc(OBF.date) : ''}${OBF.type ? ' · ' + esc(OBF.type) : ''}</h2>
     <table><tr><th style="width:90px">OB no.</th><th style="width:100px">Time</th><th style="width:90px">Type</th><th>Entry</th><th style="width:100px">Officer</th></tr>${rows.map(e => `<tr><td>${esc(e.ob_no)}</td><td>${esc(fmt(e.created_at))}</td><td>${esc(e.entry_type)}</td><td>${esc(e.summary)}${e.report_ref ? ' <b>[' + esc(e.report_ref) + ']</b>' : ''}${e.complainant ? '<br>re: ' + esc(e.complainant) : ''}</td><td>${esc(e.officer_name || 'System')}</td></tr>`).join('')}</table>
-    <div class="small">Printed ${esc(fmt(new Date().toISOString().slice(0, 19)))} by ${esc(ME.full_name)} · last entry hash ${esc(rows[rows.length - 1].entry_hash.slice(0, 16))}. Prototype printout.</div><div class="sig"></div><div class="small">Station commander (signature and date)</div>`);
+    <div class="small">Printed ${esc(fmt(new Date().toISOString().slice(0, 19)))} by ${esc(ME.full_name)} · last entry hash ${esc(rows[rows.length - 1].entry_hash.slice(0, 16))}. System-generated station record copy.</div><div class="sig"></div><div class="small">Station commander (signature and date)</div>`);
 }

@@ -14,9 +14,9 @@ html{color-scheme:light}
 body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh;padding-bottom:80px}
 .wrap{max-width:560px;margin:0 auto;padding:16px}
 .wrap.wide{max-width:1100px}
-header.top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;max-width:1100px;margin:0 auto;background:#1f3a93;color:#fff;border-bottom:3px solid #f2c200}
-.brand{font-weight:700;font-size:18px}.brand b{color:#ffd84a}
-.tag{font-size:12px;color:var(--mute);border:1px solid var(--line);padding:2px 8px;border-radius:99px}
+header.top{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;max-width:1100px;margin:0 auto;background:linear-gradient(118deg,#102a68 0%,#1f469f 58%,#2a73ce 100%);color:#fff;border-bottom:4px solid #f2c200;box-shadow:0 8px 22px #0f2c6838;min-height:76px}
+.brand{font-weight:800;font-size:19px;letter-spacing:.02em;display:flex;align-items:center;text-shadow:0 1px 2px #081a4050}.brand b{color:#ffd84a}
+.tag{font-size:12px;color:var(--mute);border:1px solid var(--line);padding:5px 11px;border-radius:99px}
 h1{font-size:30px;line-height:1.15;margin:18px 0 10px}h2{font-size:22px;margin:6px 0 12px}h3{font-size:15px;color:var(--mute);font-weight:600;margin:16px 0 8px;text-transform:uppercase;letter-spacing:.04em}
 p.lead{color:var(--mute);margin-bottom:18px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
@@ -41,13 +41,18 @@ textarea{min-height:110px;resize:vertical}
 .check{display:flex;gap:10px;align-items:flex-start;margin:16px 0;font-weight:400}.check input{width:auto;margin-top:4px}
 .refbox{text-align:center;font-size:36px;font-weight:800;letter-spacing:.06em;padding:18px;margin:12px 0}
 .pinbox{text-align:center;font-size:26px;letter-spacing:.25em;color:var(--amber);padding:10px}
-nav.tabs{position:fixed;bottom:0;left:0;right:0;background:#fffffff5;backdrop-filter:blur(8px);border-top:1px solid var(--line);display:flex;justify-content:center;padding:6px 8px calc(6px + env(safe-area-inset-bottom));z-index:10}
-nav.tabs a{flex:1;max-width:140px;text-align:center;color:var(--mute);text-decoration:none;font-size:12px;padding:6px 0;border-radius:10px}
-nav.tabs a .i{display:block;font-size:20px;line-height:1.2}
+nav.tabs{position:fixed;bottom:0;left:0;right:0;background:#f8faff;border-top:1px solid #c8d6ee;box-shadow:0 -8px 24px #132e6818;display:flex;justify-content:center;align-items:center;gap:8px;padding:9px 12px calc(9px + env(safe-area-inset-bottom));z-index:10;perspective:800px}
+nav.tabs a{flex:1;max-width:140px;text-align:center;color:var(--mute);text-decoration:none;font-size:12px;padding:8px 5px;border-radius:13px;border:1px solid transparent;transition:transform .2s ease,box-shadow .2s ease,background .2s ease,color .2s ease,border-color .2s ease;transform:translateY(0);transform-style:preserve-3d}
+nav.tabs a .i{display:block;font-size:21px;line-height:1.2;transition:transform .2s ease}
+nav.tabs a:hover,nav.tabs a:focus-visible{color:#fff;background:linear-gradient(145deg,#2864c5,#17377f);border-color:#85a8e7;box-shadow:0 9px 18px #17377f42;transform:translateY(-5px) rotateX(3deg);outline:none}
+nav.tabs a:hover .i,nav.tabs a:focus-visible .i{transform:translateY(-2px) scale(1.08)}
+nav.tabs a.on{background:#e7efff;border-color:#c2d3f2}
+@media(hover:none){nav.tabs a:active{transform:translateY(-3px);box-shadow:0 6px 12px #17377f30}}
+@media(prefers-reduced-motion:reduce){nav.tabs a,nav.tabs a .i{transition:none!important;transform:none!important}}
 nav.tabs a.on{color:var(--accent)}
 .news-strip{background:linear-gradient(135deg,#102a64,#1f3a93);color:#fff;padding:14px max(16px,calc((100% - 680px)/2));box-shadow:0 4px 14px #14295824}
 .news-strip h2{font-size:18px;margin:0 0 8px}.news-carousel{overflow:hidden;border:1px solid #ffffff40;border-radius:14px;background:#132f70}.news-track{display:flex;transition:transform .5s ease}.news-slide{flex:0 0 100%;min-height:250px;display:flex;align-items:stretch;color:#fff;background:linear-gradient(120deg,#17377f,#2864c5)}.news-slide img{display:block;width:48%;min-height:250px;object-fit:cover;background:#dce8fc}.news-copy{width:52%;padding:18px;display:flex;flex-direction:column;justify-content:center;gap:8px}.news-copy small{color:#d8e5ff}.news-copy b{font-size:19px;line-height:1.28}.news-copy span{font-size:14px;line-height:1.45;color:#edf3ff;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.news-copy a{color:#fff;font-weight:700;text-decoration:underline}.news-slide.no-photo .news-copy{width:100%}.news-carousel-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 2px}.news-carousel-controls button{border:1px solid #ffffff80;background:#ffffff12;color:#fff;border-radius:9px;padding:6px 12px;font:inherit;cursor:pointer}.news-dots{display:flex;gap:6px}.news-dots button{width:10px;height:10px;padding:0;border-radius:50%;background:#ffffff70}.news-dots button.active{background:#fff;transform:scale(1.25)}.news-control{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;font-size:12px;color:#d8e5ff}.news-control button{border:1px solid #ffffff80;background:transparent;color:#fff;border-radius:9px;padding:7px 10px;font:inherit;cursor:pointer}
-.home-wallpaper{position:fixed;z-index:0;inset:0;pointer-events:none;background-position:center;background-size:cover;opacity:0;transition:opacity .5s ease}.home-wallpaper.visible{opacity:.28}#app>.home-wallpaper~*{position:relative;z-index:1}header.top{position:relative;z-index:2}
+.home-wallpaper{position:fixed;z-index:0;inset:0;pointer-events:none;background-position:center;background-size:cover;background-repeat:no-repeat;opacity:0;transition:opacity .45s ease}.home-wallpaper.visible{opacity:.34}#app>.home-wallpaper~*{position:relative;z-index:1}header.top{position:relative;z-index:2}
 @media(max-width:520px){.news-slide{min-height:225px}.news-slide img{width:42%;min-height:225px}.news-copy{width:58%;padding:12px;gap:6px}.news-copy b{font-size:16px}.news-copy span{-webkit-line-clamp:3;font-size:12px}}
 @media(prefers-reduced-motion:reduce){.news-track,.home-wallpaper{transition:none!important}}
 .notice-pop{position:fixed;z-index:30;top:16px;left:50%;transform:translateX(-50%);width:min(92vw,480px);background:#fff;border-left:5px solid #168653;border-radius:12px;box-shadow:0 10px 36px #10244c44;padding:14px 44px 14px 16px;color:#132442}.notice-pop b{display:block}.notice-pop button{position:absolute;right:8px;top:8px;border:0;background:transparent;color:#40516d;font-size:20px;cursor:pointer}
@@ -142,10 +147,10 @@ body.pol a.chip{color:var(--text)}
 .pmap .tip{position:absolute;left:8px;bottom:8px;right:8px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;color:var(--text);box-shadow:0 2px 8px #0003}
 /* Brand theme is global: public reports, tracking, station tools and police dashboard. */
 body.app-theme{--bg:#f4f7ff;--panel:#fff;--panel2:#eaf0fc;--line:#c8d6ee;--text:#132447;--mute:#536687;--accent:#1f3a93;--accent-ink:#fff;--blue:#2864c5;color-scheme:light;background:var(--bg);color:var(--text)}
-body.app-theme header.top,body.app-theme.pol header.top{max-width:none;background:#1f3a93;color:#fff;border-bottom:3px solid #d8e5fb}
+body.app-theme header.top,body.app-theme.pol header.top{max-width:none;background:linear-gradient(118deg,#102a68 0%,#1f469f 58%,#2a73ce 100%);color:#fff;border-bottom:4px solid #f2c200;box-shadow:0 8px 22px #0f2c6838}
 body.app-theme .brand b,body.app-theme.pol .brand b{color:#fff}
 body.app-theme .tag,body.app-theme.pol .tag{color:#e7efff;border-color:#ffffff70}
-body.app-theme .gov{background:#1f3a93;color:#fff;border-bottom:1px solid #ffffff30}
+body.app-theme .gov{background:linear-gradient(90deg,#102a68,#2864c5);color:#fff;border-bottom:1px solid #ffffff55;font-weight:700;letter-spacing:.1em;padding:9px 14px}
 body.app-theme .offbar{background:linear-gradient(90deg,#17377f,#2864c5);color:#fff;border-bottom:2px solid #b7c9ee}
 body.app-theme .offbar small{color:#e4edff}
 body.app-theme .btn.primary small,body.app-theme.pol .btn.primary small{color:#e4edff}
@@ -163,14 +168,15 @@ body.app-theme .info,body.app-theme.pol .info,body.app-theme .pill,body.app-them
 body.app-theme .notice-pop{border-left-color:#1f3a93}
 body.app-theme .pinbox{color:#1f3a93}
 body.app-theme .slip-h{border-color:#1f3a93;color:#1f3a93}
-body.app-theme nav.tabs{background:#fffffffa;border-top:1px solid #c8d6ee}
+body.app-theme nav.tabs{background:#f8faff;border-top:1px solid #c8d6ee}
 body.app-theme nav.tabs a.on{color:#1f3a93;font-weight:700}
+body.app-theme nav.tabs a.on:hover,body.app-theme nav.tabs a:focus-visible{color:#fff;background:linear-gradient(145deg,#2864c5,#17377f);border-color:#85a8e7;box-shadow:0 9px 18px #17377f42}
 body.app-theme input,body.app-theme select,body.app-theme textarea{background:#fff;color:#132447;border-color:#c8d6ee}
 body.app-theme .card,body.app-theme .tile{box-shadow:0 1px 4px #1f3a9310}
 </style>
 </head>
 <body class="app-theme">
-<header class="top"><div class="brand"><img class="logo" src="/logo.png" alt="Uganda Police crest">SafeReport <b>UG</b></div><span class="tag">Uganda Police e-Crime · v2.8</span></header>
+<header class="top"><div class="brand"><img class="logo" src="/logo.png" alt="Uganda Police crest">SafeReport <b>UG</b></div><span class="tag">Official Reporting Portal</span></header>
 <main id="app"></main>
 <nav class="tabs" id="tabs">
   <a href="#home" data-t="home"><span class="i">⌂</span>Home</a>
@@ -226,7 +232,7 @@ window.addEventListener('hashchange', route);
 /* ---------------- HOME ---------------- */
 function vHome() {
   const mine = (lsGet('myrefs') || '').split(',').filter(Boolean);
-  $app.innerHTML = `<div class="home-wallpaper" id="homewall" aria-hidden="true"></div><div class="gov">🇺🇬 Uganda Police e-Crime portal · prototype</div>
+  $app.innerHTML = `<div class="home-wallpaper" id="homewall" aria-hidden="true"></div><div class="gov">🇺🇬 UGANDA POLICE E-CRIME REPORTING PORTAL</div>
     <section class="news-strip" aria-labelledby="news-heading"><h2 id="news-heading">Latest news &amp; updates</h2><div id="newsfeed" class="news-carousel"><div class="news-slide no-photo"><div class="news-copy"><b>Loading the latest public updates…</b></div></div></div><div id="news-source" class="hint" style="color:#d8e5ff;margin-top:8px">Checking the official UPF news feed when available.</div><div class="news-control"><a style="color:#fff" target="_blank" rel="noopener noreferrer" href="https://upf.go.ug/">Visit Uganda Police Force news ↗</a><button type="button" id="news-opt">Enable alerts</button></div><div id="news-opt-state" class="hint" style="color:#d8e5ff;margin-top:6px">Choose whether to get update alerts on this device.</div></section><div class="wrap">
     <img class="biglogo" src="/logo.png" alt="Uganda Police crest">
     <div class="sos" style="margin-top:0"><b>If this is an emergency, call 999 or 112.</b> Do not submit a tip for danger happening right now.</div>
@@ -273,7 +279,7 @@ function vHome() {
 }
 function safeUpfImage(value){try{const u=new URL(value);return u.protocol==='https:'&&['upf.go.ug','www.upf.go.ug'].includes(u.hostname)?u.href:'';}catch{return '';}}
 function newsCard(n){const photo=safeUpfImage(n.image_url),media=photo?`<img src="${esc(photo)}" alt="" loading="lazy">`:'';return `<article class="news-slide ${photo?'':'no-photo'}">${media}<div class="news-copy"><small>${esc(n.category)} · ${esc(fmt(n.created_at))}</small><b>${esc(n.title)}</b><span>${esc(n.summary)}</span>${n.url?`<a target="_blank" rel="noopener noreferrer" href="${esc(n.url)}">Read official update ↗</a>`:''}</div></article>`;}
-function selectNewsSlide(index){const track=document.getElementById('news-track'),wall=document.getElementById('homewall');if(!track||!newsItems.length)return;newsIndex=(index+newsItems.length)%newsItems.length;track.style.transform=`translateX(-${newsIndex*100}%)`;document.querySelectorAll('.news-dots button').forEach((b,i)=>b.classList.toggle('active',i===newsIndex));const image=safeUpfImage(newsItems[newsIndex]?.image_url);if(wall&&image){wall.classList.remove('visible');setTimeout(()=>{if(!document.getElementById('homewall'))return;wall.style.backgroundImage=`linear-gradient(rgba(244,247,255,.50),rgba(244,247,255,.50)),url("${image}")`;wall.classList.add('visible');},40);}}
+function selectNewsSlide(index){const track=document.getElementById('news-track'),wall=document.getElementById('homewall');if(!track||!newsItems.length)return;newsIndex=(index+newsItems.length)%newsItems.length;track.style.transform=`translateX(-${newsIndex*100}%)`;document.querySelectorAll('.news-dots button').forEach((b,i)=>b.classList.toggle('active',i===newsIndex));const image=safeUpfImage(newsItems[newsIndex]?.image_url);if(wall&&image){wall.classList.remove('visible');setTimeout(()=>{if(!document.getElementById('homewall'))return;wall.style.backgroundImage=`url("${image}")`;wall.classList.add('visible');},40);}}
 function renderNewsCarousel(items){const box=document.getElementById('newsfeed');if(!box)return;newsItems=items.slice(0,8);newsIndex=0;if(!newsItems.length){box.innerHTML='<div class="news-slide no-photo"><div class="news-copy"><small>Community information</small><b>No updates have been published yet.</b><span>Public news and safety notices will appear here.</span></div></div>';return;}box.innerHTML=`<div class="news-track" id="news-track">${newsItems.map(newsCard).join('')}</div><div class="news-carousel-controls"><button type="button" id="news-prev" aria-label="Previous update">‹ Previous</button><div class="news-dots">${newsItems.map((_,i)=>`<button type="button" data-news-index="${i}" aria-label="Show update ${i+1}" class="${i?'':'active'}"></button>`).join('')}</div><button type="button" id="news-next" aria-label="Next update">Next ›</button></div>`;box.querySelectorAll('img').forEach(img=>img.onerror=()=>{img.remove();img.closest('.news-slide')?.classList.add('no-photo');});box.onclick=e=>{const dot=e.target.closest('[data-news-index]');if(dot)selectNewsSlide(+dot.dataset.newsIndex);else if(e.target.closest('#news-prev'))selectNewsSlide(newsIndex-1);else if(e.target.closest('#news-next'))selectNewsSlide(newsIndex+1);};selectNewsSlide(0);if(newsItems.length>1)newsCarouselTimer=setInterval(()=>{if(document.getElementById('newsfeed'))selectNewsSlide(newsIndex+1);else clearInterval(newsCarouselTimer);},5000);}
 async function loadNewsFeed(){const box=document.getElementById('newsfeed');if(!box)return;try{const r=await api('/api/public/news');renderNewsCarousel(r.news);const src=document.getElementById('news-source');if(src)src.textContent=r.source?.error?`UPF news could not be refreshed right now. ${r.news.length?'Showing saved updates.':'Please try again later or check the official UPF site.'}`:r.source?.last_checked?`Official UPF feed checked ${fmt(r.source.last_checked)}.`:'Official UPF stories are imported automatically when their public feed is available.';if(lsGet('newsLastId')===null)lsSet('newsLastId',String(Math.max(0,...r.news.map(n=>+n.id))));}catch{box.innerHTML='<div class="news-slide no-photo"><div class="news-copy"><b>Latest updates are temporarily unavailable.</b></div></div>';}}
 async function pollNews(){if(lsGet('newsOptIn')!=='1')return;try{const after=+(lsGet('newsLastId')||0),r=await api(`/api/public/news?after=${after}`);if(!r.news.length)return;const items=r.news.sort((a,b)=>a.id-b.id);for(const n of items){showNotice('New police update',n.title);if('Notification'in window&&Notification.permission==='granted')new Notification('Uganda Police update',{body:n.title,tag:'safereport-news-'+n.id});}lsSet('newsLastId',String(Math.max(after,...items.map(n=>+n.id))));loadNewsFeed();}catch{}}
@@ -320,7 +326,7 @@ function loadDraft() { try { return JSON.parse(lsGet('draft') || '{}'); } catch 
 function vReport() {
   if (sessionStorage.getItem('consent')) return vReportForm();
   const st = sessionStorage.getItem('rstage') || 'privacy';
-  const bar = `<div class="offbar"><img src="/logo.png" alt="" style="height:56px;width:56px;background:#fff;border-radius:50%;padding:3px"><div><b>UGANDA POLICE FORCE</b><small>Online crime reporting · prototype</small></div></div>`;
+  const bar = `<div class="offbar"><img src="/logo.png" alt="" style="height:56px;width:56px;background:#fff;border-radius:50%;padding:3px"><div><b>UGANDA POLICE FORCE</b><small>Secure online crime reporting</small></div></div>`;
   if (st === 'privacy') {
     $app.innerHTML = `${bar}<div class="wrap"><h2 style="text-align:center;font-size:26px">Privacy Statement</h2>
     <div class="card"><div class="stmt">This website is designed to let you give tip information to Uganda Police to help prevent and detect crime and protect life and property.<br><br>You are not required to give your name or other personal information. However, failing to supply requested information may slow or prevent the investigation of your tip.<br><br>By voluntarily giving information on this page, you consent to Uganda Police using and keeping it. Information you give may be used for investigation and may be shared as required by law or with other agencies handling the matter.<br><br>Your report is also compared with Ugandan law to help officers respond faster. Personal information is handled in line with Ugandan data protection law (Data Protection and Privacy Act, 2019).<br><br>If you enable automatic speech recognition, some browsers send speech to their own online recognition service. You can turn that option off and type the statement instead. The audio you choose to record is sent to the police with your report.</div></div>
@@ -800,12 +806,15 @@ async function openCase(ref) {
   $('nf').onsubmit = async e => { e.preventDefault(); if (!$('nb').value.trim()) return; await api(`/api/police/reports/${encodeURIComponent(ref)}/note`, 'POST', { body: $('nb').value }); openCase(ref); };
 }
 async function pUsers() {
-  const body = document.getElementById('pbody'), { users } = await api('/api/admin/users');
+  const body = document.getElementById('pbody');
+  const [{ users }, { stations }] = await Promise.all([api('/api/admin/users'), api('/api/police/stations')]);
+  const visibleStations = ME.role === 'admin' ? stations : stations.filter(s => s.name === ME.station);
+  const stationOptions = visibleStations.map(s => `<option value="${esc(s.name)}" ${s.name === ME.station ? 'selected' : ''}>${esc(s.name)} · ${esc(s.area || s.district || '')}</option>`).join('');
   body.innerHTML = `<div class="card" style="overflow:auto"><table><tr><th>Officer</th><th>Badge</th><th>Role</th><th>Status</th><th></th></tr>${users.map(u => `<tr><td>${esc(u.full_name)}<div class="hint">${esc(u.station)}</div></td><td>${esc(u.badge_number || '')}</td><td>${esc(ROLE_NAME[u.role] || u.role)}</td><td>${u.locked ? '<span class="bad-t">Locked</span>' : '<span class="ok-t">Active</span>'}</td><td style="white-space:nowrap">${u.username === ME.username ? '' : `<button class="btn sm" data-edit="${u.id}" data-name="${esc(u.full_name)}" data-badge="${esc(u.badge_number || '')}">Edit</button> ${u.locked ? `<button class="btn sm" data-ul="${u.id}">Unlock</button> ` : ''}<button class="btn sm" data-tog="${u.id}" data-on="${u.active}">${u.active ? 'Deactivate' : 'Activate'}</button>`}</td></tr>`).join('')}</table></div>
-  <div class="card"><b>Register officer</b><div class="hint">Sign-in uses registered name, badge number and secure PIN/password. You can only manage officers belonging to your station.</div><form id="uf"><div class="row"><div><label>Full name</label><input id="un" required></div><div><label>Badge number</label><input id="ub" required></div><div><label>National ID number</label><input id="un2" maxlength="14" placeholder="CM…………" autocapitalize="characters" required></div></div>
+  <div class="card"><b>Register officer</b><div class="hint">Choose a registered station. Station commanders can manage officers at their station; administrators can select any active station.</div><form id="uf"><div class="row"><div><label>Full name</label><input id="un" required></div><div><label>Badge number</label><input id="ub" required></div><div><label>National ID number</label><input id="un2" maxlength="14" placeholder="CM…………" autocapitalize="characters" required></div></div>
   <div class="row"><div><label>Username</label><input id="uu" required></div><div><label>Temporary password (8+)</label><input id="up" type="password" required></div></div>
-  <div class="row"><div><label>Role</label><select id="ur"><option value="officer">Officer</option><option value="cid">CID (Criminal Investigations)</option><option value="commander">Commander</option><option value="admin">Administrator</option></select></div><div><label>Station</label><input id="us"></div></div>
-  <div id="uerr"></div><button class="btn sm primary" style="margin-top:12px">Create user</button></form></div>`;
+  <div class="row"><div><label>Role</label><select id="ur"><option value="officer">Officer</option><option value="cid">CID (Criminal Investigations)</option><option value="commander">Commander</option><option value="admin">Administrator</option></select></div><div><label for="us">Registered station</label><select id="us" required ${visibleStations.length ? '' : 'disabled'}><option value="">${visibleStations.length ? 'Choose a registered station…' : 'No registered station available'}</option>${stationOptions}</select></div></div>
+  <div id="uerr"></div><button class="btn sm primary" style="margin-top:12px" ${visibleStations.length ? '' : 'disabled'}>Create user</button></form></div>`;
   body.onclick = async e => {
     const t = e.target.closest('[data-tog]'), ul = e.target.closest('[data-ul]'), ed=e.target.closest('[data-edit]');
     if (ed) { const full_name=prompt('Officer name',ed.dataset.name); if(full_name===null)return; const badge_number=prompt('Badge number',ed.dataset.badge); if(badge_number===null)return; const password=prompt('New secure PIN/password (leave empty to keep current)',''); try { await api('/api/admin/users/'+ed.dataset.edit,'PATCH',{full_name,badge_number,...(password?{password}: {})}); pUsers(); } catch(x) { alert(x.message); } }
