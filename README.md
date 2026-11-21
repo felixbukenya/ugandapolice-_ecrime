@@ -1,8 +1,6 @@
 # SafeReport UG: Uganda Police e-Crime Reporting System
 
-Built from the "SafeReport UG" prototype video and extended into a working full-stack system.
-
-## Quick start (read this first)
+## Quick start l
 The pages only work **through the server**. Opening `index.html` or `phone.html` directly from the file manager shows empty pages (no categories, no inbox).
 1. In the project folder run `npm install`, then start it:
    - **With XAMPP/MySQL:** start MySQL in XAMPP, then `node server.js`.
@@ -36,6 +34,7 @@ Common messages:
 Want zero setup instead? `DB_DRIVER=sqlite node server.js` uses a local file database (needs Node 22+, uses `schema_sqlite.sql`).
 
 Demo police accounts (**change before real use**). Officers sign in with their **National ID number (NIN)** + password, only (no ID-card or face scan):
+below is the dummy data
 
 | NIN             | Password       | Role                                      |
 |-----------------|----------------|-------------------------------------------|
